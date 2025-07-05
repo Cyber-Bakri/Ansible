@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nginx Server - {{ ansible_hostname }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .info-box {
+            background-color: #e8f5e8;
+            border: 1px solid #4caf50;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .server-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .info-item {
+            background-color: #f9f9f9;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 4px solid #4caf50;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #666;
+        }
+        .info-value {
+            color: #333;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Nginx Server Successfully Configured!</h1>
+        
+        <div class="info-box">
+            <strong>✅ Congratulations!</strong> Your Nginx server has been successfully configured using Ansible.
+        </div>
+        
+        <div class="server-info">
+            <div class="info-item">
+                <div class="info-label">Server Hostname:</div>
+                <div class="info-value">{{ ansible_hostname }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Operating System:</div>
+                <div class="info-value">{{ ansible_distribution }} {{ ansible_distribution_version }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">IP Address:</div>
+                <div class="info-value">{{ ansible_default_ipv4.address }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Architecture:</div>
+                <div class="info-value">{{ ansible_architecture }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Deployment Time:</div>
+                <div class="info-value">{{ ansible_date_time.iso8601 }}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Managed by:</div>
+                <div class="info-value">Terraform + Ansible</div>
+            </div>
+        </div>
+        
+        <div class="info-box">
+            <strong>Setup Details:</strong>
+            <ul>
+                <li>Infrastructure provisioned with Terraform</li>
+                <li>Nginx configured with Ansible</li>
+                <li>Security headers enabled</li>
+                <li>Gzip compression enabled</li>
+                <li>Performance optimizations applied</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html> 

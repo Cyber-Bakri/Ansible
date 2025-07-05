@@ -1,0 +1,58 @@
+---
+- name: Configure Nginx on EC2 instance
+  hosts: nginx_servers
+  become: yes
+  gather_facts: yes
+
+  tasks:
+  - name: Update package cache
+    apt:
+      update_cache: yes
+      cache_valid_time: 3600
+    when: ansible_os_family == "Debian"
+
+  - name: Install Nginx
+    apt:
+      name: nginx
+      state: present
+    when: ansible_os_family == "Debian"
+
+  - name: Start and enable Nginx service
+    systemd:
+      name: nginx
+      state: started
+      enabled: yes
+
+  - name: Create custom Nginx configuration
+    template:
+      src: nginx.conf.j2
+      dest: /etc/nginx/sites-available/default
+      backup: yes
+    notify: restart nginx
+
+  - name: Create a simple index.html
+    template:
+      src: index.html.j2
+      dest: /var/www/html/index.html
+      owner: www-data
+      group: www-data
+      mode: '0644'
+
+  - name: Check if Nginx is running
+    service:
+      name: nginx
+      state: started
+
+  - name: Verify Nginx is accessible
+    uri:
+      url: "http://{{ ansible_default_ipv4.address }}"
+      method: GET
+      status_code: 200
+    delegate_to: localhost
+    become: no
+
+  handlers:
+  - name: restart nginx
+    systemd:
+      name: nginx
+      state: restarted

@@ -1,0 +1,65 @@
+name: Destroy Nginx Infrastructure
+
+on:
+  workflow_dispatch:  # Manually triggerable from GitHub UI
+    inputs:
+      confirm_destroy:
+        description: 'Type "DESTROY" to confirm infrastructure destruction'
+        required: true
+        default: ''
+
+jobs:
+  destroy:
+    name: Destroy Infrastructure
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Validate confirmation
+      run: |
+        if [ "${{ github.event.inputs.confirm_destroy }}" != "DESTROY" ]; then
+          echo "❌ Destruction not confirmed. Please type 'DESTROY' to confirm."
+          exit 1
+        fi
+        echo "✅ Destruction confirmed"
+
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.5.0
+
+    - name: Initialize Terraform
+      run: |
+        cd infra
+        terraform init
+
+    - name: Show current infrastructure
+      run: |
+        cd infra
+        echo "📋 Current infrastructure state:"
+        terraform show
+
+    - name: Destroy infrastructure
+      run: |
+        cd infra
+        echo "🔥 Destroying infrastructure..."
+        terraform destroy -auto-approve
+
+    - name: Cleanup summary
+      run: |
+        echo "## 💥 Infrastructure Destroyed!" >> $GITHUB_STEP_SUMMARY
+        echo "All AWS resources have been successfully destroyed:" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ EC2 instance terminated" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Security group removed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ All associated resources cleaned up" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "⚠️ **Note**: If you need to redeploy, use the 'Deploy Nginx with Terraform + Ansible' workflow." >> $GITHUB_STEP_SUMMARY
