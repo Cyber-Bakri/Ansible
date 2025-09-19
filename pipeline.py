@@ -794,14 +794,19 @@ def test_contracts_login(page: Page):  # ← pytest provides the 'page' fixture
         # Try multiple approaches to search for products
         search_performed = False
         
-        # First try the specific search input
+        # First try the specific search input for "Apex"
         search_input = page.locator("input.w-chinput[type='text']")
         if search_input.count() > 0:
+            search_input.clear()  # Clear any existing text
             search_input.fill("Apex")
+            logger.info("Filled search input with 'Apex'")
             page.press("input.w-chinput[type='text']", "Enter")
             page.wait_for_load_state("networkidle")
             search_performed = True
-            logger.info("Performed search using w-chinput")
+            logger.info("Performed search for 'Apex' using w-chinput")
+            
+            # Wait a moment for search results to populate
+            time.sleep(2)
         
         # If that didn't work, try other search inputs
         if not search_performed:
@@ -815,11 +820,14 @@ def test_contracts_login(page: Page):  # ← pytest provides the 'page' fixture
             for selector in search_selectors:
                 search_elem = page.locator(selector).first
                 if search_elem.count() > 0:
+                    search_elem.clear()  # Clear any existing text
                     search_elem.fill("Apex")
+                    logger.info(f"Filled search input with 'Apex' using {selector}")
                     page.keyboard.press("Enter")
                     page.wait_for_load_state("networkidle")
                     search_performed = True
-                    logger.info(f"Performed search using {selector}")
+                    logger.info(f"Performed search for 'Apex' using {selector}")
+                    time.sleep(2)  # Wait for search results
                     break
         
         # If still no search performed, try navigating to catalog first
@@ -831,15 +839,18 @@ def test_contracts_login(page: Page):  # ← pytest provides the 'page' fixture
                 page.wait_for_load_state("networkidle")
                 logger.info("Navigated to catalog")
                 
-                # Now try searching in catalog
+                # Now try searching for "Apex" in catalog
                 for selector in ["input[type='search']", "input[placeholder*='search']", "input.w-chinput[type='text']"]:
                     search_elem = page.locator(selector).first
                     if search_elem.count() > 0:
+                        search_elem.clear()  # Clear any existing text
                         search_elem.fill("Apex")
+                        logger.info(f"Filled catalog search with 'Apex' using {selector}")
                         page.keyboard.press("Enter")
                         page.wait_for_load_state("networkidle")
                         search_performed = True
-                        logger.info(f"Performed search in catalog using {selector}")
+                        logger.info(f"Performed search for 'Apex' in catalog using {selector}")
+                        time.sleep(2)  # Wait for search results
                         break
         
         if search_performed:
