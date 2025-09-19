@@ -32,27 +32,12 @@ def test_contracts_login(page: Page):
         logger.info("Clicking Sign In button...")
         print("Logged in, Page title:", page.title())
         
-        # Search for Apex using the correct search input
+        # Search for Apex - simple working version
         page.wait_for_load_state("networkidle")
-        
-        # Try the main search input from HTML inspection
-        search_input = page.locator("input#mcg_oc")
-        if search_input.count() > 0:
-            search_input.fill("Apex")
-            # Click the search button
-            search_btn = page.locator("input[type='submit'][value='Search']")
-            if search_btn.count() > 0:
-                search_btn.click()
-            else:
-                page.keyboard.press("Enter")
-            logger.info("Searched for Apex using main search")
-        else:
-            # Fallback to the w-chinput if main search not found
-            page.fill("input.w-chinput[type='text']", "Apex")
-            page.press("input.w-chinput[type='text']", "Enter")
-            logger.info("Searched for Apex using fallback")
-        
+        page.fill("input.w-chinput[type='text']", "Apex")
+        page.press("input.w-chinput[type='text']", "Enter")
         page.wait_for_load_state("networkidle")
+        logger.info("Searched for Apex")
         
         # Add to Cart
         test_add_to_cart(page)
