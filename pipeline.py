@@ -45,7 +45,7 @@ def test_contracts_login(page: Page):  # - pytest provides the 'page' fixture
         page.wait_for_load_state("networkidle")
         
         # Set quantity to 5 and add to cart
-        page.fill("input[name='qty']", "5")
+        page.fill("input[name='_$Seovc']", "5")
         page.click("button:has-text('Add to Cart')")
         page.wait_for_load_state("networkidle")
     except Exception as e:
