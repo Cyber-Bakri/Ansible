@@ -39,6 +39,7 @@ django-hello-test-and-scan:
     PYTHON_UNITTEST_ARGS: "-v,--tb=short,polls/tests.py,cowsay/tests.py"
     # Build package configuration
     PYTHON_BUILD_PACKAGE: "true"
+    PYTHON_BUILD_FRAMEWORK: "build"
     PYTHON_BUILD_TYPE: "sdist"
     # FOSSA Analysis enabled
     RUN_FOSSA_ANALYSIS: "true"
@@ -70,6 +71,7 @@ fastapi-hello-test-and-scan:
     PYTHON_UNITTEST_ARGS: "-v,--tb=short,--cov=fastapi_hello_world,--cov-report=term-missing"
     # Build package configuration
     PYTHON_BUILD_PACKAGE: "true"
+    PYTHON_BUILD_FRAMEWORK: "build"
     PYTHON_BUILD_TYPE: "sdist"
     # FOSSA Analysis enabled
     RUN_FOSSA_ANALYSIS: "true"
@@ -101,6 +103,7 @@ flask-hello-test-and-scan:
     PYTHON_UNITTEST_ARGS: "-v,--tb=short,--cov=flask_hello_world,--cov-report=term-missing"
     # Build package configuration
     PYTHON_BUILD_PACKAGE: "true"
+    PYTHON_BUILD_FRAMEWORK: "build"
     PYTHON_BUILD_TYPE: "sdist"
     # FOSSA Analysis enabled
     RUN_FOSSA_ANALYSIS: "true"
@@ -132,6 +135,7 @@ python-conda-hello-test-and-scan:
     PYTHON_UNITTEST_ARGS: "-v,--tb=short,--cov=hello_world,--cov-report=term-missing"
     # Build package configuration
     PYTHON_BUILD_PACKAGE: "true"
+    PYTHON_BUILD_FRAMEWORK: "build"
     PYTHON_BUILD_TYPE: "sdist"
     # FOSSA Analysis enabled
     RUN_FOSSA_ANALYSIS: "true"
@@ -163,6 +167,7 @@ python-pipenv-hello-test-and-scan:
     PYTHON_UNITTEST_ARGS: "-v,--tb=short,--cov=hello_world,--cov-report=term-missing"
     # Build package configuration
     PYTHON_BUILD_PACKAGE: "true"
+    PYTHON_BUILD_FRAMEWORK: "build"
     PYTHON_BUILD_TYPE: "sdist"
     # FOSSA Analysis enabled
     RUN_FOSSA_ANALYSIS: "true"
