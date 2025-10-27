@@ -1,72 +1,168 @@
 ---
-- name: Configure Nginx on EC2 instance
-  hosts: nginx_servers
-  become: yes
-  gather_facts: yes
+include:
+- project: "engineering/pipelinecli"
+  file: "/templates/plugins/plugin-steps.yml"
+  ref: latest
 
-  tasks:
-  - name: Update package cache
-    apt:
-      update_cache: yes
-      cache_valid_time: 3600
-    when: ansible_os_family == "Debian"
+variables:
+  METTA_APPLICATION: "springbootfossa"
+  METTA_COMPONENT: "pythontestapps"
+  SHIELD_TEAM: "springbootfossa"
+  CARID: 9895
+  LOB: "OSPO"
 
-  - name: Install Nginx
-    apt:
-      name: nginx
-      state: present
-    when: ansible_os_family == "Debian"
+stages:
+- test-and-scan
 
-  - name: Start and enable Nginx service
-    systemd:
-      name: nginx
-      state: started
-      enabled: yes
+# =========================================
+# Django Hello - Test & FOSSA Scan
+# =========================================
+django-hello-test-and-scan:
+  extends: .python-build-and-analyze-template
+  stage: test-and-scan
+  tags:
+  - shield
+  variables:
+    DEBUG: "true"
+    WORK_DIR: django_hello
+    # Virtual environment settings
+    PYTHON_VIRTUALENV: "venv_django"
+    # Install dependencies from requirements.txt
+    PYTHON_USE_PYPROJECT_TOML: "false"
+    PYTHON_USE_REQUIREMENTS_TXT: "true"
+    # Unit test configuration - Django uses unittest/pytest-django
+    PYTHON_RUN_UNITTESTS: "true"
+    PYTHON_TEST_FRAMEWORK: "pytest"
+    PYTHON_TEST_DIRECTORY: "."
+    PYTHON_TEST_PATTERN: "tests.py"
+    # Django-specific pytest arguments
+    PYTHON_UNITTEST_ARGS: "-v,--tb=short,polls/tests.py,cowsay/tests.py"
+    # Build package configuration
+    PYTHON_BUILD_PACKAGE: "true"
+    PYTHON_BUILD_TYPE: "sdist"
+    # FOSSA Analysis enabled
+    RUN_FOSSA_ANALYSIS: "true"
 
-  - name: Create custom Nginx configuration
-    template:
-      src: nginx.conf.j2
-      dest: /etc/nginx/sites-available/default
-      backup: yes
-    notify: restart nginx
+# =========================================
+# FastAPI Hello - Test & FOSSA Scan
+# =========================================
+fastapi-hello-test-and-scan:
+  extends: .python-build-and-analyze-template
+  stage: test-and-scan
+  tags:
+  - shield
+  needs:
+  - django-hello-test-and-scan
+  variables:
+    DEBUG: "true"
+    WORK_DIR: fastapi_hello
+    # Virtual environment settings
+    PYTHON_VIRTUALENV: "venv_fastapi"
+    # Install dependencies from requirements.txt
+    PYTHON_USE_PYPROJECT_TOML: "false"
+    PYTHON_USE_REQUIREMENTS_TXT: "true"
+    # Unit test configuration
+    PYTHON_RUN_UNITTESTS: "true"
+    PYTHON_TEST_FRAMEWORK: "pytest"
+    PYTHON_TEST_DIRECTORY: "tests"
+    PYTHON_TEST_PATTERN: "test_*.py"
+    # FastAPI test arguments with coverage
+    PYTHON_UNITTEST_ARGS: "-v,--tb=short,--cov=fastapi_hello_world,--cov-report=term-missing"
+    # Build package configuration
+    PYTHON_BUILD_PACKAGE: "true"
+    PYTHON_BUILD_TYPE: "sdist"
+    # FOSSA Analysis enabled
+    RUN_FOSSA_ANALYSIS: "true"
 
-  - name: Create a simple index.html
-    template:
-      src: index.html.j2
-      dest: /var/www/html/index.html
-      owner: www-data
-      group: www-data
-      mode: '0644'
+# =========================================
+# Flask Hello - Test & FOSSA Scan
+# =========================================
+flask-hello-test-and-scan:
+  extends: .python-build-and-analyze-template
+  stage: test-and-scan
+  tags:
+  - shield
+  needs:
+  - fastapi-hello-test-and-scan
+  variables:
+    DEBUG: "true"
+    WORK_DIR: flask_hello
+    # Virtual environment settings
+    PYTHON_VIRTUALENV: "venv_flask"
+    # Install dependencies from requirements.txt
+    PYTHON_USE_PYPROJECT_TOML: "false"
+    PYTHON_USE_REQUIREMENTS_TXT: "true"
+    # Unit test configuration
+    PYTHON_RUN_UNITTESTS: "true"
+    PYTHON_TEST_FRAMEWORK: "pytest"
+    PYTHON_TEST_DIRECTORY: "tests"
+    PYTHON_TEST_PATTERN: "test_*.py"
+    # Flask test arguments with coverage
+    PYTHON_UNITTEST_ARGS: "-v,--tb=short,--cov=flask_hello_world,--cov-report=term-missing"
+    # Build package configuration
+    PYTHON_BUILD_PACKAGE: "true"
+    PYTHON_BUILD_TYPE: "sdist"
+    # FOSSA Analysis enabled
+    RUN_FOSSA_ANALYSIS: "true"
 
-  - name: Check if Nginx is running
-    service:
-      name: nginx
-      state: started
+# =========================================
+# Python Conda Hello - Test & FOSSA Scan
+# =========================================
+python-conda-hello-test-and-scan:
+  extends: .python-build-and-analyze-template
+  stage: test-and-scan
+  tags:
+  - shield
+  needs:
+  - flask-hello-test-and-scan
+  variables:
+    DEBUG: "true"
+    WORK_DIR: python_conda_hello
+    # Virtual environment settings
+    PYTHON_VIRTUALENV: "venv_conda"
+    # Install dependencies from requirements.txt
+    PYTHON_USE_PYPROJECT_TOML: "false"
+    PYTHON_USE_REQUIREMENTS_TXT: "true"
+    # Unit test configuration
+    PYTHON_RUN_UNITTESTS: "true"
+    PYTHON_TEST_FRAMEWORK: "pytest"
+    PYTHON_TEST_DIRECTORY: "tests"
+    PYTHON_TEST_PATTERN: "test_*.py"
+    # Additional pytest arguments for better output
+    PYTHON_UNITTEST_ARGS: "-v,--tb=short,--cov=hello_world,--cov-report=term-missing"
+    # Build package configuration
+    PYTHON_BUILD_PACKAGE: "true"
+    PYTHON_BUILD_TYPE: "sdist"
+    # FOSSA Analysis enabled
+    RUN_FOSSA_ANALYSIS: "true"
 
-  - name: Wait for Nginx to be fully ready
-    wait_for:
-      port: 80
-      host: "{{ ansible_default_ipv4.address }}"
-      delay: 5
-      timeout: 30
-
-  - name: Verify Nginx is accessible
-    uri:
-      url: "http://localhost"
-      method: GET
-      status_code: 200
-      timeout: 20
-    retries: 3
-    delay: 5
-    ignore_errors: yes
-    register: nginx_local_check
-
-  - name: Display local check result
-    debug:
-      msg: "Local Nginx check: {{ 'SUCCESS' if nginx_local_check.status == 200 else 'FAILED' }}"
-
-  handlers:
-  - name: restart nginx
-    systemd:
-      name: nginx
-      state: restarted
+# =========================================
+# Python Pipenv Hello - Test & FOSSA Scan
+# =========================================
+python-pipenv-hello-test-and-scan:
+  extends: .python-build-and-analyze-template
+  stage: test-and-scan
+  tags:
+  - shield
+  needs:
+  - python-conda-hello-test-and-scan
+  variables:
+    DEBUG: "true"
+    WORK_DIR: python_pipenv_hello
+    # Virtual environment settings
+    PYTHON_VIRTUALENV: "venv_pipenv"
+    # Install dependencies from requirements.txt
+    PYTHON_USE_PYPROJECT_TOML: "false"
+    PYTHON_USE_REQUIREMENTS_TXT: "true"
+    # Unit test configuration
+    PYTHON_RUN_UNITTESTS: "true"
+    PYTHON_TEST_FRAMEWORK: "pytest"
+    PYTHON_TEST_DIRECTORY: "tests"
+    PYTHON_TEST_PATTERN: "test_*.py"
+    # Additional pytest arguments for better output
+    PYTHON_UNITTEST_ARGS: "-v,--tb=short,--cov=hello_world,--cov-report=term-missing"
+    # Build package configuration
+    PYTHON_BUILD_PACKAGE: "true"
+    PYTHON_BUILD_TYPE: "sdist"
+    # FOSSA Analysis enabled
+    RUN_FOSSA_ANALYSIS: "true"
