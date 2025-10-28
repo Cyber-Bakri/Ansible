@@ -28,21 +28,20 @@ django-hello-test-and-scan:
     WORK_DIR: django_hello
     # Virtual environment settings
     PYTHON_VIRTUALENV: "venv_django"
-    # Install dependencies from pyproject.toml (Poetry)
-    PYTHON_USE_PYPROJECT_TOML: "true"
-    PYTHON_USE_REQUIREMENTS_TXT: "false"
-    PYTHON_INSTALL_DEV_DEPENDENCIES: "true"
-    # Unit test configuration - Django uses unittest/pytest-django
+    # Install dependencies from requirements.txt
+    PYTHON_USE_PYPROJECT_TOML: "false"
+    PYTHON_USE_REQUIREMENTS_TXT: "true"
+    # Django-specific environment setup
+    PYTHON_COMMAND_migrate: "python manage.py migrate"
+    # Unit test configuration - Django uses unittest
     PYTHON_RUN_UNITTESTS: "true"
-    PYTHON_TEST_FRAMEWORK: "pytest"
+    PYTHON_TEST_FRAMEWORK: "unittest"
     PYTHON_TEST_DIRECTORY: "."
     PYTHON_TEST_PATTERN: "tests.py"
-    # Django-specific pytest arguments
-    PYTHON_UNITTEST_ARGS: "-v,--tb=short,polls/tests.py,cowsay/tests.py"
-    # Build package configuration
-    PYTHON_BUILD_PACKAGE: "true"
-    PYTHON_BUILD_FRAMEWORK: "build"
-    PYTHON_BUILD_TYPE: "sdist"
+    # Use Django's test command instead of unittest discovery
+    PYTHON_COMMAND_djangotest: "python manage.py test polls cowsay"
+    # Build package configuration (disabled for Django app)
+    PYTHON_BUILD_PACKAGE: "false"
     # FOSSA Analysis enabled
     RUN_FOSSA_ANALYSIS: "true"
 
