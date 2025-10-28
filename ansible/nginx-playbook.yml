@@ -10,6 +10,7 @@ variables:
   SHIELD_TEAM: "springbootfossa"
   CARID: 9895
   LOB: "OSPO"
+  FOSSA_API_KEY: "${FOSSA_API_KEY}"
 
 stages:
 - test-and-scan
