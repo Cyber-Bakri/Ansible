@@ -31,15 +31,13 @@ django-hello-test-and-scan:
     # Install dependencies from requirements.txt
     PYTHON_USE_PYPROJECT_TOML: "false"
     PYTHON_USE_REQUIREMENTS_TXT: "true"
-    # Django-specific environment setup
-    PYTHON_COMMAND_migrate: "python manage.py migrate"
-    # Unit test configuration - Django uses unittest
+    # Unit test configuration - using pytest-django
     PYTHON_RUN_UNITTESTS: "true"
-    PYTHON_TEST_FRAMEWORK: "unittest"
+    PYTHON_TEST_FRAMEWORK: "pytest"
     PYTHON_TEST_DIRECTORY: "."
     PYTHON_TEST_PATTERN: "tests.py"
-    # Use Django's test command instead of unittest discovery
-    PYTHON_COMMAND_djangotest: "python manage.py test polls cowsay"
+    # pytest arguments for Django
+    PYTHON_UNITTEST_ARGS: "-v,--tb=short,polls/tests.py,cowsay/tests.py"
     # Build package configuration (disabled for Django app)
     PYTHON_BUILD_PACKAGE: "false"
     # FOSSA Analysis enabled
