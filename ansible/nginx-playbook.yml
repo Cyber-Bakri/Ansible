@@ -28,9 +28,10 @@ django-hello-test-and-scan:
     WORK_DIR: django_hello
     # Virtual environment settings
     PYTHON_VIRTUALENV: "venv_django"
-    # Install dependencies from requirements.txt
-    PYTHON_USE_PYPROJECT_TOML: "false"
-    PYTHON_USE_REQUIREMENTS_TXT: "true"
+    # Install dependencies from pyproject.toml (Poetry)
+    PYTHON_USE_PYPROJECT_TOML: "true"
+    PYTHON_USE_REQUIREMENTS_TXT: "false"
+    PYTHON_INSTALL_DEV_DEPENDENCIES: "true"
     # Unit test configuration - Django uses unittest/pytest-django
     PYTHON_RUN_UNITTESTS: "true"
     PYTHON_TEST_FRAMEWORK: "pytest"
