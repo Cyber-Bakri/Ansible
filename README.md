@@ -8,6 +8,7 @@ This repository contains a comprehensive testing matrix for FOSSA (Free and Open
 
 # [[#Covered Languages and Package Managers|Covered Languages and Package Managers]]
 # [[#Project Structure|Project Structure]]
+# [[#Sample Repositories|Sample Repositories]]
 # [[#Prerequisites|Prerequisites]]
 # [[#Setup Instructions|Setup Instructions]]
 # [[#Running Tests|Running Tests]]
@@ -62,6 +63,45 @@ SO/
 
 ----
 
+== Sample Repositories ==
+
+Each language has a dedicated repository for FOSSA testing:
+
+{| class="wikitable"
+! Language !! Repository !! Sample Contents !! FOSSA Status
+|-
+| Go || [https://gitlab.us.bank-dns.com/OSPO/fossa-go-hello fossa-go-hello] || go_hello || Pass
+|-
+| Python || [https://gitlab.us.bank-dns.com/OSPO/python-test-apps python-test-apps] || python_hello, django_hello, fastapi_hello, flask_hello, python_pipenv_hello, python_conda_hello || Pass
+|-
+| PHP || [https://gitlab.us.bank-dns.com/OSPO/php-fossa-demo php-fossa-demo] || php-fossa-demo || Pass
+|-
+| Java (Maven) || [https://gitlab.us.bank-dns.com/OSPO/fossa-maven-demo fossa-maven-demo] || java_maven_hello || Pass
+|-
+| Java (Gradle) || [https://gitlab.us.bank-dns.com/OSPO/fossa-gradle-demo fossa-gradle-demo] || java_gradle_hello || Pass
+|-
+| Node.js (npm) || [https://gitlab.us.bank-dns.com/OSPO/fossa-javascript-demo fossa-javascript-demo] || nodejs_npm_hello || Pass
+|-
+| Node.js (Yarn) || fossa-node-yarn-hello || nodejs_yarn_hello || Pass
+|-
+| C# || [https://gitlab.us.bank-dns.com/OSPO/fossa-dotnet-demo fossa-dotnet-demo] || csharp_nuget_hello || Pass
+|}
+
+=== Repository Layout ===
+
+Each language lives in a dedicated repo, for example:
+
+* <code>fossa-go-hello</code>
+* <code>fossa-python-hello</code>
+* <code>fossa-php-hello</code>
+* <code>fossa-java-maven-hello</code>
+* <code>fossa-java-gradle-hello</code>
+* <code>fossa-node-npm-hello</code>
+* <code>fossa-node-yarn-hello</code>
+* <code>fossa-csharp-hello</code>
+
+----
+
 == Prerequisites ==
 
 === General Requirements ===
@@ -69,6 +109,7 @@ SO/
 * FOSSA CLI installed ([https://github.com/fossas/fossa-cli Installation Guide])
 * Git
 * Access to FOSSA dashboard/account
+* Access to GitLab OSPO organization
 
 === Language-Specific Requirements ===
 
@@ -112,9 +153,16 @@ SO/
 
 === Clone the Repository ===
 
+Choose the appropriate repository based on the language you're testing:
+
 <syntaxhighlight lang="bash">
-git clone <repository-url>
-cd SO
+# Example: Clone the Python test apps repository
+git clone https://gitlab.us.bank-dns.com/OSPO/python-test-apps.git
+cd python-test-apps
+
+# Example: Clone the Go hello repository
+git clone https://gitlab.us.bank-dns.com/OSPO/fossa-go-hello.git
+cd fossa-go-hello
 </syntaxhighlight>
 
 === Go Project Setup ===
@@ -551,7 +599,7 @@ To add a new language or package manager to the testing matrix:
 # Create a README.md specific to that project
 # Update this wiki page
 # Test FOSSA scanning locally
-# Submit a pull request
+# Submit a pull request to the appropriate OSPO repository
 
 ----
 
@@ -560,6 +608,7 @@ To add a new language or package manager to the testing matrix:
 * [https://docs.fossa.com/ FOSSA Documentation]
 * [https://github.com/fossas/fossa-cli FOSSA CLI GitHub]
 * [https://fossa.com/learn License Compliance Best Practices]
+* [https://gitlab.us.bank-dns.com/OSPO OSPO GitLab Organization]
 
 ----
 
