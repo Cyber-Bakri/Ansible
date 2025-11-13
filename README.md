@@ -87,19 +87,6 @@ Each language has a dedicated repository for FOSSA testing:
 | C# || [https://gitlab.us.bank-dns.com/OSPO/fossa-dotnet-demo fossa-dotnet-demo] || csharp_nuget_hello || Pass
 |}
 
-=== Repository Layout ===
-
-Each language lives in a dedicated repo, for example:
-
-* <code>fossa-go-hello</code>
-* <code>fossa-python-hello</code>
-* <code>fossa-php-hello</code>
-* <code>fossa-java-maven-hello</code>
-* <code>fossa-java-gradle-hello</code>
-* <code>fossa-node-npm-hello</code>
-* <code>fossa-node-yarn-hello</code>
-* <code>fossa-csharp-hello</code>
-
 ----
 
 == Prerequisites ==
@@ -110,6 +97,7 @@ Each language lives in a dedicated repo, for example:
 * Git
 * Access to FOSSA dashboard/account
 * Access to GitLab OSPO organization
+* Access to Shield Console and Pipeline Templates
 
 === Language-Specific Requirements ===
 
@@ -334,81 +322,134 @@ fossa analyze
 fossa test
 </syntaxhighlight>
 
-{{Note|When using the CI/CD pipeline, '''do not''' manually run <code>fossa analyze</code> or <code>fossa test</code> in your pipeline scripts. The FOSSA plugin handles analysis automatically.}}
+{{Note|When using the CI/CD pipeline, '''do not''' manually run <code>fossa analyze</code>. The Shield Pipeline templates handle FOSSA scanning automatically.}}
 
-=== CI/CD Integration ===
+----
 
-==== Defining the FOSSA Scan Stage ====
+=== CI/CD Integration with Shield Pipeline Templates ===
 
-The FOSSA scan is integrated into the CI/CD pipeline using a dedicated scan stage. '''Important:''' Do not manually call <code>fossa analyze</code> in your pipeline - the FOSSA plugin automatically handles dependency detection and analysis.
+==== Overview ====
 
-Here's an example of how to properly define the scan stage in <code>.gitlab-ci.yml</code>:
+All FOSSA test repositories use the '''Shield Pipeline''' templates from the <code>engineering/pipelinecli</code> project. These shared templates provide standardized CI/CD workflows that include:
+
+* Automated dependency installation
+* Unit testing
+* '''FOSSA dependency scanning''' (when enabled)
+* Security scanning with Twistlock, Blackduck, and Fortify
+* Integration with SHIELD platform tools
+
+{{Note|'''Critical:''' Do NOT manually call <code>fossa analyze</code> in your pipeline scripts. The Shield Pipeline plugins automatically handle FOSSA scanning when <code>RUN_FOSSA_ANALYSIS: "true"</code> is set in your job configuration.}}
+
+==== How It Works ====
+
+# '''Include the Template''': Your <code>.gitlab-ci.yml</code> references shared templates from <code>engineering/pipelinecli</code>
+# '''Extend a Template Job''': Your job extends a language-specific template (e.g., <code>.python-build-and-analyze-template</code>)
+# '''Set Required Variables''': Configure METTA, SHIELD, CARID, LOB, and enable FOSSA analysis
+# '''Define Your Stages''': Specify pipeline stages like <code>test-and-scan</code> or <code>install & scan</code>
+# '''Let Templates Handle the Rest''': The template automatically installs dependencies, runs tests, and performs FOSSA scanning
+
+==== Quick Start ====
+
+To add FOSSA scanning to your project:
+
+# Include the Shield Pipeline template in your <code>.gitlab-ci.yml</code>
+# Set <code>RUN_FOSSA_ANALYSIS: "true"</code> in your job variables
+# Extend the appropriate template for your language/framework
+# Push your changes and let the pipeline run
+
+==== Resources ====
+
+{| class="wikitable"
+! Resource !! Description !! Link
+|-
+| '''Shield Pipeline Documentation''' || Complete guide on using pipeline templates || [https://shield-console.us.bank-dns.com/docs/default/component/plat-shieldplatform-shielddocs/extern/pipelinecli/ Shield Pipeline Docs]
+|-
+| '''Pipeline Templates Repository''' || Browse available templates and plugins || [https://gitlab.us.bank-dns.com/engineering/pipelinecli/-/tree/latest/templates/plugins?ref_type=heads PipelineCLI Templates]
+|-
+| '''Plugin Shared Options''' || Available template jobs and configuration options || [https://shield-console.us.bank-dns.com/docs/default/component/plat-shieldplatform-shielddocs/extern/pipelinecli/ Plugin Documentation]
+|-
+| '''OSPO Sample Repositories''' || Working examples for each language || [https://gitlab.us.bank-dns.com/OSPO OSPO Organization]
+|}
+
+==== Available Template Jobs by Language ====
+
+{| class="wikitable"
+! Language/Framework !! Template Job to Extend !! Pipeline Stage
+|-
+| Node.js (npm) || <code>.nodejs-20-install-scan-template</code> || <code>install & scan</code>
+|-
+| Python (all managers) || <code>.python-build-and-analyze-template</code> || <code>test-and-scan</code>
+|-
+| Java (Maven) || <code>.maven-build-and-analyze-template</code> || <code>build-and-scan</code>
+|-
+| Java (Gradle) || <code>.gradle-build-and-analyze-template</code> || <code>build-and-scan</code>
+|-
+| PHP (Composer) || <code>.php-build-and-analyze-template</code> || <code>build-and-scan</code>
+|-
+| C# (NuGet) || <code>.dotnet-build-and-analyze-template</code> || <code>build-and-scan</code>
+|-
+| Go (Modules) || <code>.go-build-and-analyze-template</code> || <code>build-and-scan</code>
+|}
+
+==== Example Pipeline Structure ====
+
+A typical FOSSA-enabled pipeline follows this structure:
 
 <syntaxhighlight lang="yaml">
+# 1. Include the shared template
+include:
+  - project: 'engineering/pipelinecli'
+    file: '/templates/plugins/plugin-steps.yml'
+    ref: latest
+
+# 2. Define global variables
+variables:
+  METTA_APPLICATION: "your-app-name"
+  SHIELD_TEAM: "your-team-name"
+  CARID: 9895
+  LOB: "OSPO"
+
+# 3. Define stages
 stages:
-  - build
-  - test
-  - scan
+  - test-and-scan
 
-# Build stage - install dependencies
-build:
-  stage: build
-  script:
-    - npm install
-    # or: pip install -r requirements.txt
-    # or: go mod download
-  artifacts:
-    paths:
-      - node_modules/
-      - package-lock.json
-
-# Test stage - run unit tests
-test:
-  stage: test
-  script:
-    - npm test
-  dependencies:
-    - build
-
-# FOSSA scan stage - DO NOT manually run fossa analyze
-# The plugin automatically detects and scans dependencies
-fossa_scan:
-  stage: scan
-  image: fossas/fossa-cli:latest
-  script:
-    - fossa test  # Only run the test command
-  only:
-    - main
-    - merge_requests
-  allow_failure: false
-</syntaxhighlight>
-
-==== Alternative Configuration with API Key ====
-
-<syntaxhighlight lang="yaml">
-fossa_scan:
-  stage: scan
-  image: fossas/fossa-cli:latest
+# 4. Create job that extends template
+your-job-name:
+  extends: .python-build-and-analyze-template
+  stage: test-and-scan
   variables:
-    FOSSA_API_KEY: $FOSSA_API_KEY  # Set this in CI/CD variables
-  script:
-    - fossa test
-  only:
-    - main
-    - merge_requests
-  tags:
-    - docker
+    RUN_FOSSA_ANALYSIS: "true"  # This enables FOSSA scanning!
+    WORK_DIR: your_project_dir
 </syntaxhighlight>
 
-==== Key Points ====
+For complete configuration examples, see the [https://gitlab.us.bank-dns.com/OSPO OSPO sample repositories].
 
-* The FOSSA plugin automatically detects dependency files (<code>package.json</code>, <code>requirements.txt</code>, <code>pom.xml</code>, etc.)
-* '''Do not run''' <code>fossa analyze</code> in CI/CD - the plugin handles this
-* Only use <code>fossa test</code> to check compliance against your FOSSA policies
-* Ensure dependencies are installed in a previous stage (build) before the scan stage runs
-* Set <code>FOSSA_API_KEY</code> as a protected CI/CD variable in your project settings
+==== Key Configuration Variables ====
+
+When enabling FOSSA analysis, you'll need to set these variables:
+
+'''Required Global Variables:'''
+* <code>METTA_APPLICATION</code> - Your application name in Metta
+* <code>METTA_COMPONENT</code> - Component identifier
+* <code>SHIELD_TEAM</code> - Your SHIELD team name
+* <code>CARID</code> - Your application's CAR ID
+* <code>LOB</code> - Line of Business
+* <code>FOSSA_API_KEY</code> - Set as protected CI/CD variable
+
+'''Required Job Variables:'''
+* <code>RUN_FOSSA_ANALYSIS: "true"</code> - Enables FOSSA scanning in the pipeline
+
+'''Optional Python-Specific Variables:'''
+* <code>WORK_DIR</code> - Subdirectory containing your Python project
+* <code>PYTHON_VIRTUALENV</code> - Virtual environment name
+* <code>PYTHON_BUILD_PACKAGE</code> - Whether to build a package
+* <code>PYTHON_BUILD_FRAMEWORK</code> - Build tool (setupy, build, poetry, etc.)
+
+For a complete list of variables, consult the [https://shield-console.us.bank-dns.com/docs/default/component/plat-shieldplatform-shielddocs/extern/pipelinecli/ Shield Pipeline Documentation].
 
 === Detected Dependency Files by Language ===
+
+FOSSA automatically detects and analyzes the following dependency manifest files:
 
 {| class="wikitable"
 ! Language !! Dependency File(s) !! FOSSA Detection
@@ -505,10 +546,19 @@ export FOSSA_API_KEY=your-api-key-here
 
 If your FOSSA scan is failing in the pipeline:
 
-# '''Verify dependencies are installed''': Ensure the build stage completes successfully before the scan stage
-# '''Check API key''': Confirm <code>FOSSA_API_KEY</code> is set in CI/CD variables
-# '''Don't run fossa analyze''': Remove any manual <code>fossa analyze</code> commands - let the plugin handle it
-# '''Check artifact paths''': Ensure lock files (<code>package-lock.json</code>, <code>Pipfile.lock</code>, etc.) are available
+# '''Verify RUN_FOSSA_ANALYSIS is set''': Ensure <code>RUN_FOSSA_ANALYSIS: "true"</code> is in your job variables
+# '''Check template reference''': Confirm you're including the correct template from <code>engineering/pipelinecli</code>
+# '''Verify API key''': Confirm <code>FOSSA_API_KEY</code> is set in CI/CD variables (Settings → CI/CD → Variables)
+# '''Check template extension''': Make sure you're extending the right template for your language
+# '''Review Shield Pipeline docs''': Consult [https://shield-console.us.bank-dns.com/docs/default/component/plat-shieldplatform-shielddocs/extern/pipelinecli/ Shield Pipeline Documentation]
+
+==== Template Not Found Error ====
+
+If you get an error about template not found:
+
+# Verify your include block references <code>engineering/pipelinecli</code>
+# Check that you're using <code>ref: latest</code> or a valid branch/tag
+# Ensure you have access to the pipelinecli repository
 
 ==== Go Module Issues ====
 
@@ -570,6 +620,7 @@ dotnet restore --force
 
 * Ensure virtual environments are activated before running tests
 * Some packages may require system-level dependencies (e.g., <code>psycopg2</code> needs PostgreSQL dev libraries)
+* Set <code>WORK_DIR</code> variable to point to your specific Python project directory
 
 ==== Java ====
 
@@ -580,6 +631,7 @@ dotnet restore --force
 
 * Use <code>nvm</code> (Node Version Manager) to manage multiple Node.js versions
 * Some packages may require native build tools
+* Ensure <code>node_modules/</code> is included in artifacts if needed by downstream jobs
 
 ==== C# ====
 
@@ -596,15 +648,23 @@ To add a new language or package manager to the testing matrix:
 # Add a simple "Hello World" application
 # Include at least 2-3 dependencies
 # Add unit tests
+# Create a <code>.gitlab-ci.yml</code> that:
+#* Includes the <code>engineering/pipelinecli</code> template
+#* Extends the appropriate language template
+#* Sets <code>RUN_FOSSA_ANALYSIS: "true"</code>
 # Create a README.md specific to that project
 # Update this wiki page
-# Test FOSSA scanning locally
-# Submit a pull request to the appropriate OSPO repository
+# Test FOSSA scanning in your pipeline
+# Submit a merge request to the appropriate OSPO repository
+
+Refer to existing [https://gitlab.us.bank-dns.com/OSPO OSPO repositories] for configuration examples.
 
 ----
 
 == References ==
 
+* [https://shield-console.us.bank-dns.com/docs/default/component/plat-shieldplatform-shielddocs/extern/pipelinecli/ Shield Pipeline Documentation] - '''Primary resource for CI/CD setup'''
+* [https://gitlab.us.bank-dns.com/engineering/pipelinecli/-/tree/latest/templates/plugins?ref_type=heads Pipeline Templates Repository]
 * [https://docs.fossa.com/ FOSSA Documentation]
 * [https://github.com/fossas/fossa-cli FOSSA CLI GitHub]
 * [https://fossa.com/learn License Compliance Best Practices]
