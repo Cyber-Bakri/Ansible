@@ -1,683 +1,571 @@
-===== FOSSA testing matrix =====
-
-== Overview ==
-
-This repository contains a comprehensive testing matrix for FOSSA (Free and Open Source Software Analysis) across multiple programming languages and their respective package managers. The purpose is to validate FOSSA's ability to detect, scan, and analyze dependencies across different technology stacks.
-
-== Table of Contents ==
-
-# [[#Covered Languages and Package Managers|Covered Languages and Package Managers]]
-# [[#Project Structure|Project Structure]]
-# [[#Sample Repositories|Sample Repositories]]
-# [[#Prerequisites|Prerequisites]]
-# [[#Setup Instructions|Setup Instructions]]
-# [[#Running Tests|Running Tests]]
-# [[#FOSSA Integration|FOSSA Integration]]
-# [[#Test Results|Test Results]]
-# [[#Troubleshooting|Troubleshooting]]
-
-----
-
-== Covered Languages and Package Managers ==
-
-{| class="wikitable"
-! Language !! Package Managers !! Status
-|-
-| '''Go''' || Go Modules || ✅ Covered
-|-
-| '''Python''' || Pip, Pipenv, Poetry, Conda || ✅ Covered
-|-
-| '''PHP''' || Composer || ✅ Covered
-|-
-| '''Java''' || Maven, Gradle || ✅ Covered
-|-
-| '''Node.js''' || NPM, Yarn || ✅ Covered
-|-
-| '''C#''' || NuGet || ✅ Covered
-|}
-
-----
-
-== Project Structure ==
-
-<pre>
-SO/
-├── go_hello/                    # Go with Go Modules
-├── python_hello/                # Python with Pip
-├── python_pipenv_hello/         # Python with Pipenv
-├── python_poetry_hello/         # Python with Poetry
-├── python_conda_hello/          # Python with Conda
-├── php_composer_hello/          # PHP with Composer
-├── java_maven_hello/            # Java with Maven
-├── java_gradle_hello/           # Java with Gradle
-├── nodejs_npm_hello/            # Node.js with NPM
-├── nodejs_yarn_hello/           # Node.js with Yarn
-├── csharp_nuget_hello/          # C# with NuGet
-├── django_hello/                # Django framework (Python)
-├── fastapi_hello/               # FastAPI framework (Python)
-├── flask_hello/                 # Flask framework (Python)
-├── .gitlab-ci.yml               # CI/CD pipeline configuration
-├── .gitignore                   # Git ignore rules
-└── README.md                    # Repository overview
-</pre>
-
-----
-
-== Sample Repositories ==
-
-Each language has a dedicated repository for FOSSA testing:
+# Creating Terraform Cloud Workspaces for the Patrol Environment
+
+## Overview
+
+This document outlines the complete process for creating and configuring Terraform Cloud workspaces for the Patrol environment. The Patrol environment is a QA environment that requires dedicated infrastructure workspaces and corresponding application branches.
+
+## High-Level Workflow
+
+```
+1. Clone pge-tfc-workspaces repo
+   └─> Create feature branch
+       └─> Add workspace blocks to wsv2-08.yaml
+           └─> Run orchestration.py (validates YAML & generates JSON)
+               └─> Create PR and merge
+                   
+2. Configure webcore-infra repo
+   └─> Create patrol.tfvars
+       └─> Update locals.tf with domains
+           └─> Commit changes to patrol branch
+           
+3. Create patrol branches in all app repos
+   └─> Engage-Graph
+   └─> Engage-Queries-ECS
+   └─> Engage-Webapp
+   └─> Engage-Workorder-AtRisk-Sync
+   └─> Engage-Workorder-Status-GIS-Sync
+   └─> Engage-NLB-Manager
+   
+4. Verify workspace creation in Terraform Cloud
+   └─> Check all 3 workspaces exist
+       └─> Trigger initial Terraform runs
+           └─> Monitor pipeline executions
+           
+5. Submit MyIT ticket for Azure AD
+   └─> Wait for Azure AD configuration
+       └─> Test authentication and access
+           └─> ✅ Patrol environment ready!
+```
 
-{| class="wikitable"
-! Language !! Repository !! Sample Contents !! FOSSA Status
-|-
-| Go || [https://gitlab.us.bank-dns.com/OSPO/fossa-go-hello fossa-go-hello] || go_hello || Pass
-|-
-| Python || [https://gitlab.us.bank-dns.com/OSPO/python-test-apps python-test-apps] || python_hello, django_hello, fastapi_hello, flask_hello, python_pipenv_hello, python_conda_hello || Pass
-|-
-| PHP || [https://gitlab.us.bank-dns.com/OSPO/php-fossa-demo php-fossa-demo] || php-fossa-demo || Pass
-|-
-| Java (Maven) || [https://gitlab.us.bank-dns.com/OSPO/fossa-maven-demo fossa-maven-demo] || java_maven_hello || Pass
-|-
-| Java (Gradle) || [https://gitlab.us.bank-dns.com/OSPO/fossa-gradle-demo fossa-gradle-demo] || java_gradle_hello || Pass
-|-
-| Node.js (npm) || [https://gitlab.us.bank-dns.com/OSPO/fossa-javascript-demo fossa-javascript-demo] || nodejs_npm_hello || Pass
-|-
-| Node.js (Yarn) || fossa-node-yarn-hello || nodejs_yarn_hello || Pass
-|-
-| C# || [https://gitlab.us.bank-dns.com/OSPO/fossa-dotnet-demo fossa-dotnet-demo] || csharp_nuget_hello || Pass
-|}
+## Table of Contents
 
-----
+1. [Prerequisites](#prerequisites)
+2. [Architecture Overview](#architecture-overview)
+3. [Step-by-Step Implementation](#step-by-step-implementation)
+4. [Infrastructure Configuration](#infrastructure-configuration)
+5. [Application Repository Setup](#application-repository-setup)
+6. [Validation and Deployment](#validation-and-deployment)
+7. [Azure AD Authentication Setup](#phase-7-azure-ad-authentication-setup)
+8. [Troubleshooting](#troubleshooting)
+9. [References](#references)
 
-== Prerequisites ==
+---
 
-=== General Requirements ===
-
-* FOSSA CLI installed ([https://github.com/fossas/fossa-cli Installation Guide])
-* Git
-* Access to FOSSA dashboard/account
-* Access to GitLab OSPO organization
-* Access to Shield Console and Pipeline Templates
+## Prerequisites
 
-=== Language-Specific Requirements ===
+Before beginning, ensure you have the following:
 
-==== Go ====
+- **Access Requirements:**
+  - Admin privileges to the `pge-tfc-workspaces` repository
+  - Personal GitHub PAT (Personal Access Token) with appropriate permissions
+  - Access to Terraform Cloud with appropriate workspace creation permissions
+  - Read-only and apply AD group memberships configured
+
+- **Tools:**
+  - Git installed locally
+  - Python 3.x installed (for running orchestration script)
+  - Text editor or IDE
+
+- **Knowledge:**
+  - Basic understanding of Terraform Cloud workspaces
+  - Familiarity with Git branching and pull request workflows
+  - Understanding of YAML/JSON configuration files
+
+---
+
+## Architecture Overview
+
+### Workspace Configuration Process
+
+**Important:** Workspaces are defined in YAML files (`wsv2-*.yaml`), which are then validated and converted to JSON by the `orchestration.py` script. Both YAML (source) and JSON (generated) files are committed to the repository.
+
+### Workspaces Created
+
+Three Terraform Cloud workspaces were created for the Patrol environment:
+
+| Workspace Name | Purpose | Working Directory |
+|---|---|---|
+| `patrolgraphinfra01` | Graph service infrastructure | `tf` |
+| `patrolqueriesinfra01` | Queries service infrastructure | `tf` |
+| `patrolwebappinfra01` | Web application infrastructure | `tf` |
+
+### Application Repositories
+
+The following application repositories required `patrol` branches:
+
+- **webcore-infra** (Infrastructure configuration)
+- **Engage-Graph**
+- **Engage-Queries-ECS**
+- **Engage-Webapp**
+- **Engage-Workorder-AtRisk-Sync**
+- **Engage-Workorder-Status-GIS-Sync**
+- **Engage-NLB-Manager**
 
-* Go 1.18+ installed
-* <code>go mod</code> support enabled
+---
 
-==== Python ====
+## Step-by-Step Implementation
 
-* Python 3.8+ installed
-* pip (bundled with Python)
-* Pipenv: <code>pip install pipenv</code>
-* Poetry: <code>pip install poetry</code>
-* Conda/Miniconda: [https://docs.conda.io/en/latest/miniconda.html Download]
+### Phase 1: Repository Setup
 
-==== PHP ====
+#### 1. Clone the Workspace Repository
 
-* PHP 7.4+ or 8.x
-* Composer: [https://getcomposer.org/download/ Download]
+```bash
+git clone https://github.com/pgetech/pge-tfc-workspaces
+cd pge-tfc-workspaces
+```
 
-==== Java ====
+#### 2. Create a Feature Branch
 
-* JDK 11+ installed
-* Maven 3.6+: [https://maven.apache.org/download.cgi Download]
-* Gradle 7.0+: [https://gradle.org/install/ Download]
+Create a local branch following the naming convention: `<your-lan-id>/<jira-user-story>`
 
-==== Node.js ====
+```bash
+git checkout -b <your-lan-id>/<jira-ticket-id>
+```
 
-* Node.js 14+ and npm (bundled)
-* Yarn: <code>npm install -g yarn</code>
+**Example:**
+```bash
+git checkout -b b1v6/CLOUDCOE-5414
+```
 
-==== C# ====
+#### 3. Locate the Workspace Configuration File
 
-* .NET SDK 6.0+: [https://dotnet.microsoft.com/download Download]
-* NuGet CLI (optional)
+Navigate to the workspace configuration files:
+```
+workspaces-aws/wsv2-08.yaml
+```
 
-----
+> **Important:** You edit YAML files, not JSON. The orchestration script will generate JSON files from your YAML configuration.
 
-== Setup Instructions ==
+### Phase 2: Add Workspace Configurations
 
-=== Clone the Repository ===
+#### 4. Add Workspace Blocks to YAML
 
-Choose the appropriate repository based on the language you're testing:
+Add a workspace block for each of the three workspaces to the `wsv2-08.yaml` file. 
 
-<syntaxhighlight lang="bash">
-# Example: Clone the Python test apps repository
-git clone https://gitlab.us.bank-dns.com/OSPO/python-test-apps.git
-cd python-test-apps
+**Workspace Configuration Template (YAML):**
 
-# Example: Clone the Go hello repository
-git clone https://gitlab.us.bank-dns.com/OSPO/fossa-go-hello.git
-cd fossa-go-hello
-</syntaxhighlight>
+```yaml
+<workspace-name>:
+  account: "471817339124"
+  apply_ad_groups: ["AWS-A2586-QA-Engage_Ops"]
+  auto_apply: false
+  branch: "patrol"
+  csp: "aws"
+  environment: "qa"
+  file_triggers_enabled: true
+  github_org: "PGEDigitalCatalyst"
+  github_repo: "webcore-infra"
+  project: "webcore"
+  read_only_ad_groups: ["AWS-A3113-Dev-TF_Developers"]
+  run_tasks: ["Wiz-QA"]
+  terraform_version: "1.9.8"
+  working_directory: "tf"
+  tags: ["patrol", "infra"]
+```
 
-=== Go Project Setup ===
+**Create three workspace blocks using this template with these names:**
+- `patrolgraphinfra01`
+- `patrolqueriesinfra01`
+- `patrolwebappinfra01`
 
-<syntaxhighlight lang="bash">
-cd go_hello
-go mod download
-go build
-</syntaxhighlight>
+> **Note:** The configuration is identical for all three workspaces except for the workspace name. You can copy the template and change only the workspace name.
 
-=== Python Projects Setup ===
+**Key Parameters:**
+- `account`: AWS account ID (471817339124 for QA)
+- `branch`: Git branch to monitor (patrol)
+- `environment`: Environment type (qa)
+- `apply_ad_groups`: AD group with apply permissions
+- `terraform_version`: Terraform version (1.9.8)
 
-==== Pip (Standard Python) ====
+### Phase 3: Validation
 
-<syntaxhighlight lang="bash">
-cd python_hello
-pip install -r requirements.txt
-</syntaxhighlight>
+#### 5. Set GitHub PAT Environment Variable
 
-==== Pipenv ====
+**For PowerShell users:**
+```powershell
+$Env:GH_TOKEN='ghp_XXX'
+```
 
-<syntaxhighlight lang="bash">
-cd python_pipenv_hello
-pipenv install
-pipenv shell
-</syntaxhighlight>
+**For Bash/Linux users:**
+```bash
+export GH_TOKEN='ghp_XXX'
+```
 
-==== Poetry ====
+#### 6. Run the Orchestration Script
 
-<syntaxhighlight lang="bash">
-cd python_poetry_hello
-poetry install
-poetry shell
-</syntaxhighlight>
+The `orchestration.py` script validates your YAML configuration and generates the corresponding JSON files.
 
-==== Conda ====
+**Validate and generate JSON:**
+```bash
+python ./scripts/orchestration.py -w internal/aws/json/workspaces -f wsv2-08 -a
+```
 
-<syntaxhighlight lang="bash">
-cd python_conda_hello
-conda env create -f environment.yml
-conda activate python-conda-hello
-</syntaxhighlight>
+The script will:
+- Validate that repository and branch exist
+- Check all required fields are present
+- Generate `wsv2-08.json` from `wsv2-08.yaml`
 
-=== PHP Project Setup ===
+#### 7. Commit and Push Changes
 
-<syntaxhighlight lang="bash">
-cd php_composer_hello
-composer install
-</syntaxhighlight>
+```bash
+git add workspaces-aws/wsv2-08.yaml workspaces-aws/wsv2-08.json
+git commit -m "feat: add patrol workspaces for graph, queries, and webapp"
+git push origin <your-branch-name>
+```
 
-=== Java Projects Setup ===
+> **Note:** Commit both the YAML source file and the generated JSON file.
 
-==== Maven ====
+#### 8. Create Pull Request
 
-<syntaxhighlight lang="bash">
-cd java_maven_hello
-mvn clean install
-</syntaxhighlight>
+1. Navigate to the GitHub repository
+2. Create a pull request from your branch to `main`
+3. Add appropriate reviewers
+4. Wait for approval and merge
 
-==== Gradle ====
+---
 
-<syntaxhighlight lang="bash">
-cd java_gradle_hello
-gradle build
-</syntaxhighlight>
+## Infrastructure Configuration
 
-=== Node.js Projects Setup ===
+### Phase 4: Configure webcore-infra Repository
 
-==== NPM ====
+Once the workspaces are created in Terraform Cloud, you need to configure the infrastructure repository.
 
-<syntaxhighlight lang="bash">
-cd nodejs_npm_hello
-npm install
-</syntaxhighlight>
+#### 9. Create patrol.tfvars File
 
-==== Yarn ====
+In the `webcore-infra` repository, create: `tf/vars/patrol.tfvars`
 
-<syntaxhighlight lang="bash">
-cd nodejs_yarn_hello
-yarn install
-</syntaxhighlight>
+```hcl
+app_id              = "2586"
+data_classification = "Internal"
+cris                = "Low"
+notify              = ["engage-devops@pge.com"]
+owner               = ["A1P2", "C1MP", "C3T1"]
+compliance          = ["None"]
+order               = "70039360"
+```
 
-=== C# Project Setup ===
+> **Tip:** These values are specific to the Engage application. Adjust based on your application's requirements.
 
-<syntaxhighlight lang="bash">
-cd csharp_nuget_hello
-dotnet restore
-dotnet build
-</syntaxhighlight>
+#### 10. Update locals.tf
 
-----
+Add patrol workspace FQDN (Fully Qualified Domain Name) mappings to `tf/locals.tf`.
 
-== Running Tests ==
+**In the `workspace_webapp_fqdn` block, add:**
 
-=== Running Application Tests ===
+```hcl
+"patrolgraphinfra01"    = "engage-patrol.digitalcatalyst.pge.com"
+"patrolqueriesinfra01"  = "engage-patrol.digitalcatalyst.pge.com"
+"patrolwebappinfra01"   = "engage-patrol.digitalcatalyst.pge.com"
+```
 
-Each project includes unit tests to verify functionality:
+**In the `workspace_viewer_fqdn` block, add:**
 
-==== Go ====
+```hcl
+"patrolinfra03" = "viewer-patrol.dc.pge.com"
+```
 
-<syntaxhighlight lang="bash">
-cd go_hello
-go test ./...
-</syntaxhighlight>
+> **Note:** Webapp patrol workspace use the same domain: `engage-patrol.digitalcatalyst.pge.com`
 
-==== Python (general) ====
+---
 
-<syntaxhighlight lang="bash">
-# Using pytest
-pytest
+## Application Repository Setup
 
-# Using unittest
-python -m unittest discover
-</syntaxhighlight>
+### Phase 5: Create Patrol Branches
 
-==== PHP ====
+**Critical:** The Terraform Cloud workspaces will trigger pipeline runs when changes are detected on the `patrol` branch. If the branches don't exist, the pipelines will fail.
 
-<syntaxhighlight lang="bash">
-cd php_composer_hello
-./vendor/bin/phpunit
-</syntaxhighlight>
+#### 11. Create patrol Branch in Each Application Repository
 
-==== Java (Maven) ====
+For each of the following repositories, create a `patrol` branch:
 
-<syntaxhighlight lang="bash">
-cd java_maven_hello
-mvn test
-</syntaxhighlight>
+1. **webcore-infra**
+2. **Engage-Graph**
+3. **Engage-Queries-ECS**
+4. **Engage-Webapp**
+5. **Engage-Workorder-AtRisk-Sync**
+6. **Engage-Workorder-Status-GIS-Sync**
+7. **Engage-NLB-Manager**
 
-==== Java (Gradle) ====
+**Commands for each repository:**
 
-<syntaxhighlight lang="bash">
-cd java_gradle_hello
-gradle test
-</syntaxhighlight>
+```bash
+# Clone the repository
+git clone https://github.com/PGEDigitalCatalyst/<repository-name>
+cd <repository-name>
 
-==== Node.js ====
+# Create patrol branch from dev (or main)
+git checkout dev
+git pull origin dev
+git checkout -b patrol
+git push origin patrol
+```
 
-<syntaxhighlight lang="bash">
-# NPM
-npm test
+#### 12. Update Application Configuration (If Needed)
 
-# Yarn
-yarn test
-</syntaxhighlight>
+Some repositories may require additional configuration:
 
-==== C# ====
+**Add patrol script to `package.json`:**
+```json
+"start:patrol": "dotenvx run -f .env -f .env.patrol --overload -- pm2-runtime start ecosystem.config.js"
+```
 
-<syntaxhighlight lang="bash">
-dotnet test
-</syntaxhighlight>
+**Create `.env.patrol` file (if using environment files):**
+```bash
+NODE_ENV=patrol
+API_URL=https://engage-patrol.digitalcatalyst.pge.com
+# ... other patrol-specific variables
+```
 
-----
+> **Note:** Not all repositories require these changes. Check if your application uses environment-specific configurations.
 
-== FOSSA Integration ==
+---
 
-=== Local FOSSA CLI Usage ===
+## Validation and Deployment
 
-For local testing and manual analysis, you can use FOSSA CLI commands:
+### Phase 6: Verify Workspace Creation
 
-<syntaxhighlight lang="bash">
-# Initialize FOSSA in a project
-fossa init
+#### 14. Verify Workspaces in Terraform Cloud
 
-# Run FOSSA analysis
-fossa analyze
+1. Log in to [Terraform Cloud](https://app.terraform.io)
+2. Navigate to the `webcore` project
+3. Confirm all three workspaces exist: patrolgraphinfra01, patrolqueriesinfra01, patrolwebappinfra01
 
-# Run FOSSA test (check for license compliance)
-fossa test
-</syntaxhighlight>
+#### 15. Check Pipeline Execution
 
-{{Note|When using the CI/CD pipeline, '''do not''' manually run <code>fossa analyze</code>. The Shield Pipeline templates handle FOSSA scanning automatically.}}
+Search for "patrol" in your CI/CD platform. Expected pipelines:
+- engage-queries-patrol
+- engage-graph-patrol
+- engage-webapp-patrol
+- Other lambda-related patrol pipelines
 
-----
+All should show "Succeeded" status.
 
-=== CI/CD Integration with Shield Pipeline Templates ===
+#### 16. Run Initial Terraform Apply
 
-==== Overview ====
+For each workspace, trigger a run in Terraform Cloud and review/approve the plan.
 
-All FOSSA test repositories use the '''Shield Pipeline''' templates from the <code>engineering/pipelinecli</code> project. These shared templates provide standardized CI/CD workflows that include:
+---
 
-* Automated dependency installation
-* Unit testing
-* '''FOSSA dependency scanning''' (when enabled)
-* Security scanning with Twistlock, Blackduck, and Fortify
-* Integration with SHIELD platform tools
+## Phase 7: Azure AD Authentication Setup
 
-{{Note|'''Critical:''' Do NOT manually call <code>fossa analyze</code> in your pipeline scripts. The Shield Pipeline plugins automatically handle FOSSA scanning when <code>RUN_FOSSA_ANALYSIS: "true"</code> is set in your job configuration.}}
+### 17. Configure Azure AD Application Registration
 
-==== How It Works ====
+After the infrastructure is deployed and the domain is accessible, you need to configure Azure AD authentication.
 
-# '''Include the Template''': Your <code>.gitlab-ci.yml</code> references shared templates from <code>engineering/pipelinecli</code>
-# '''Extend a Template Job''': Your job extends a language-specific template (e.g., <code>.python-build-and-analyze-template</code>)
-# '''Set Required Variables''': Configure METTA, SHIELD, CARID, LOB, and enable FOSSA analysis
-# '''Define Your Stages''': Specify pipeline stages like <code>test-and-scan</code> or <code>install & scan</code>
-# '''Let Templates Handle the Rest''': The template automatically installs dependencies, runs tests, and performs FOSSA scanning
+#### Symptom
 
-==== Quick Start ====
+When accessing the patrol domain (e.g., `https://engage-patrol.digitalcatalyst.pge.com`), you encounter an Azure AD authentication error:
 
-To add FOSSA scanning to your project:
+```
+AADSTS50011: The redirect URI 'https://engage-patrol.digitalcatalyst.pge.com/redirect' 
+specified in the request does not match the redirect URIs configured for the application.
+```
 
-# Include the Shield Pipeline template in your <code>.gitlab-ci.yml</code>
-# Set <code>RUN_FOSSA_ANALYSIS: "true"</code> in your job variables
-# Extend the appropriate template for your language/framework
-# Push your changes and let the pipeline run
+#### Solution
 
-==== Resources ====
+Submit a MyIT Services request to configure Azure AD authentication for the patrol environment.
 
-{| class="wikitable"
-! Resource !! Description !! Link
-|-
-| '''Shield Pipeline Documentation''' || Complete guide on using pipeline templates || [https://shield-console.us.bank-dns.com/docs/default/component/plat-shieldplatform-shielddocs/extern/pipelinecli/ Shield Pipeline Docs]
-|-
-| '''Pipeline Templates Repository''' || Browse available templates and plugins || [https://gitlab.us.bank-dns.com/engineering/pipelinecli/-/tree/latest/templates/plugins?ref_type=heads PipelineCLI Templates]
-|-
-| '''Plugin Shared Options''' || Available template jobs and configuration options || [https://shield-console.us.bank-dns.com/docs/default/component/plat-shieldplatform-shielddocs/extern/pipelinecli/ Plugin Documentation]
-|-
-| '''OSPO Sample Repositories''' || Working examples for each language || [https://gitlab.us.bank-dns.com/OSPO OSPO Organization]
-|}
+#### Required Information for the Ticket
 
-==== Available Template Jobs by Language ====
+| Field | Value |
+|---|---|
+| **Request Type** | Azure AD Application Registration |
+| **AppId** | 2586 |
+| **Application Name** | Engage - MRAD |
+| **Environment Type** | QA |
+| **Application Internal URL** | `https://engage-patrol.digitalcatalyst.pge.com` |
+| **Desired App Name** | `engage-patrol-pgedev.msappproxy.net` |
+| **AWS Account Number** | 471817339124 |
 
-{| class="wikitable"
-! Language/Framework !! Template Job to Extend !! Pipeline Stage
-|-
-| Node.js (npm) || <code>.nodejs-20-install-scan-template</code> || <code>install & scan</code>
-|-
-| Python (all managers) || <code>.python-build-and-analyze-template</code> || <code>test-and-scan</code>
-|-
-| Java (Maven) || <code>.maven-build-and-analyze-template</code> || <code>build-and-scan</code>
-|-
-| Java (Gradle) || <code>.gradle-build-and-analyze-template</code> || <code>build-and-scan</code>
-|-
-| PHP (Composer) || <code>.php-build-and-analyze-template</code> || <code>build-and-scan</code>
-|-
-| C# (NuGet) || <code>.dotnet-build-and-analyze-template</code> || <code>build-and-scan</code>
-|-
-| Go (Modules) || <code>.go-build-and-analyze-template</code> || <code>build-and-scan</code>
-|}
+**AD Groups Requiring Access:**
+- AAD-Apr-A2586-Non-Prod-Engage-Supervisor-QA-AzureAD
+- AAD-Apr-A2586-Non-Prod-PTT-Supervisor-QA-AzureAD
+- AAD-Apr-A2586-Non-Prod-ET-Supervisor-QA-AzureAD
+- AAD-Apr-A2586-Non-Prod-ET-RO-Supervisor-QA-AzureAD
+- AAD-Apr-A2586-Non-Prod-Engage-Admin-QA-AzureAD
 
-==== Example Pipeline Structure ====
+> **Tip:** Customize these values based on your application's specific requirements and AD groups.
 
-A typical FOSSA-enabled pipeline follows this structure:
+#### Ticket Submission & Timeline
 
-<syntaxhighlight lang="yaml">
-# 1. Include the shared template
-include:
-  - project: 'engineering/pipelinecli'
-    file: '/templates/plugins/plugin-steps.yml'
-    ref: latest
+1. Navigate to [MyIT Services portal](https://iis101.cloud.pge.com/MyITServices/)
+2. Search for "Azure AD Application Registration"
+3. Submit ticket with the information above
+4. **Expected resolution:** 2-5 business days
 
-# 2. Define global variables
-variables:
-  METTA_APPLICATION: "your-app-name"
-  SHIELD_TEAM: "your-team-name"
-  CARID: 9895
-  LOB: "OSPO"
+#### Verification After Resolution
 
-# 3. Define stages
-stages:
-  - test-and-scan
+Once the ticket is resolved:
 
-# 4. Create job that extends template
-your-job-name:
-  extends: .python-build-and-analyze-template
-  stage: test-and-scan
-  variables:
-    RUN_FOSSA_ANALYSIS: "true"  # This enables FOSSA scanning!
-    WORK_DIR: your_project_dir
-</syntaxhighlight>
+1. Navigate to `https://engage-patrol.digitalcatalyst.pge.com`
+2. Click "Sign In"
+3. Authenticate with your PG&E credentials
+4. Verify successful login and access to the application
 
-For complete configuration examples, see the [https://gitlab.us.bank-dns.com/OSPO OSPO sample repositories].
+**Note:** This step is critical and must be completed before users can access the patrol environment. Without proper Azure AD configuration, all authentication attempts will fail.
 
-==== Key Configuration Variables ====
+---
 
-When enabling FOSSA analysis, you'll need to set these variables:
+## Troubleshooting
 
-'''Required Global Variables:'''
-* <code>METTA_APPLICATION</code> - Your application name in Metta
-* <code>METTA_COMPONENT</code> - Component identifier
-* <code>SHIELD_TEAM</code> - Your SHIELD team name
-* <code>CARID</code> - Your application's CAR ID
-* <code>LOB</code> - Line of Business
-* <code>FOSSA_API_KEY</code> - Set as protected CI/CD variable
+### Common Issues and Solutions
 
-'''Required Job Variables:'''
-* <code>RUN_FOSSA_ANALYSIS: "true"</code> - Enables FOSSA scanning in the pipeline
+#### Issue 1: Pipeline Fails - "Branch not found"
+**Solution:** Create the `patrol` branch in all application repositories (see Phase 5, Step 11).
 
-'''Optional Python-Specific Variables:'''
-* <code>WORK_DIR</code> - Subdirectory containing your Python project
-* <code>PYTHON_VIRTUALENV</code> - Virtual environment name
-* <code>PYTHON_BUILD_PACKAGE</code> - Whether to build a package
-* <code>PYTHON_BUILD_FRAMEWORK</code> - Build tool (setupy, build, poetry, etc.)
+#### Issue 2: Orchestration Script Validation Fails
+**Solution:** Check JSON syntax, ensure all mandatory fields are present, and verify repo/branch exist in GitHub.
 
-For a complete list of variables, consult the [https://shield-console.us.bank-dns.com/docs/default/component/plat-shieldplatform-shielddocs/extern/pipelinecli/ Shield Pipeline Documentation].
+#### Issue 3: Terraform Plan Fails
+**Solution:** Verify `patrol.tfvars` exists and is properly formatted with all required variables.
 
-=== Detected Dependency Files by Language ===
+#### Issue 4: Domain Name Resolution Issues
+**Solution:** Verify domain mappings in `locals.tf` and check DNS/load balancer configurations.
 
-FOSSA automatically detects and analyzes the following dependency manifest files:
+#### Issue 5: Permission Denied Errors
+**Solution:** Verify admin access to repository, check AD group memberships, and ensure GitHub PAT has proper permissions.
 
-{| class="wikitable"
-! Language !! Dependency File(s) !! FOSSA Detection
-|-
-| Go || <code>go.mod</code>, <code>go.sum</code> || ✅ Automatic
-|-
-| Python (Pip) || <code>requirements.txt</code>, <code>setup.py</code> || ✅ Automatic
-|-
-| Python (Pipenv) || <code>Pipfile</code>, <code>Pipfile.lock</code> || ✅ Automatic
-|-
-| Python (Poetry) || <code>pyproject.toml</code>, <code>poetry.lock</code> || ✅ Automatic
-|-
-| Python (Conda) || <code>environment.yml</code> || ✅ Automatic
-|-
-| PHP || <code>composer.json</code>, <code>composer.lock</code> || ✅ Automatic
-|-
-| Java (Maven) || <code>pom.xml</code> || ✅ Automatic
-|-
-| Java (Gradle) || <code>build.gradle</code>, <code>settings.gradle</code> || ✅ Automatic
-|-
-| Node.js (NPM) || <code>package.json</code>, <code>package-lock.json</code> || ✅ Automatic
-|-
-| Node.js (Yarn) || <code>package.json</code>, <code>yarn.lock</code> || ✅ Automatic
-|-
-| C# || <code>*.csproj</code>, <code>packages.config</code> || ✅ Automatic
-|}
+#### Issue 6: Azure AD Authentication Error (AADSTS50011)
+**Solution:** This is expected before Azure AD configuration. Submit MyIT ticket as described in Phase 7. Resolution time: 2-5 business days.
 
-----
+---
 
-== Test Results ==
+## References
 
-=== Test Coverage Matrix ===
+### Key Links
+- **Workspace Repo:** https://github.com/pgetech/pge-tfc-workspaces
+- **Infrastructure Repo:** https://github.com/PGEDigitalCatalyst/webcore-infra
+- **Terraform Cloud:** https://app.terraform.io
+- **MyIT Services:** https://iis101.cloud.pge.com/MyITServices/
 
-{| class="wikitable"
-! Project !! Build Status !! Test Status !! FOSSA Scan !! Dependencies Detected
-|-
-| go_hello || ✅ Pass || ✅ Pass || ✅ Pass || Yes
-|-
-| python_hello || ✅ Pass || ✅ Pass || ✅ Pass || Yes
-|-
-| python_pipenv_hello || ✅ Pass || ✅ Pass || ✅ Pass || Yes
-|-
-| python_poetry_hello || ✅ Pass || ✅ Pass || ✅ Pass || Yes
-|-
-| python_conda_hello || ✅ Pass || ✅ Pass || ✅ Pass || Yes
-|-
-| php_composer_hello || ✅ Pass || ✅ Pass || ✅ Pass || Yes
-|-
-| java_maven_hello || ✅ Pass || ✅ Pass || ✅ Pass || Yes
-|-
-| java_gradle_hello || ✅ Pass || ✅ Pass || ✅ Pass || Yes
-|-
-| nodejs_npm_hello || ✅ Pass || ✅ Pass || ✅ Pass || Yes
-|-
-| nodejs_yarn_hello || ✅ Pass || ✅ Pass || ✅ Pass || Yes
-|-
-| csharp_nuget_hello || ✅ Pass || ✅ Pass || ✅ Pass || Yes
-|-
-| django_hello || ✅ Pass || ✅ Pass || ✅ Pass || Yes
-|-
-| fastapi_hello || ✅ Pass || ✅ Pass || ✅ Pass || Yes
-|-
-| flask_hello || ✅ Pass || ✅ Pass || ✅ Pass || Yes
-|}
+### Key Files
+- `workspaces-aws/wsv2-08.yaml` - Workspace definitions (source)
+- `workspaces-aws/wsv2-08.json` - Generated workspace JSON
+- `scripts/orchestration.py` - Validation and generation script
+- `tf/vars/patrol.tfvars` - Environment variables
+- `tf/locals.tf` - Domain mappings
 
-=== Key Findings ===
+---
 
-# '''Dependency Detection''': FOSSA successfully detected dependencies across all package managers
-# '''License Compliance''': All projects passed license compliance checks
-# '''Vulnerability Scanning''': Security vulnerabilities were identified and documented
-# '''Performance''': Average scan time ranged from 30 seconds (Go) to 3 minutes (Java Gradle)
+## Summary
 
-----
+This document covered the complete process of creating Terraform Cloud workspaces for the Patrol environment, including:
 
-== Troubleshooting ==
+1. ✅ Cloning and configuring the workspace repository
+2. ✅ Adding workspace configurations to `wsv2-08.json`
+3. ✅ Running validation with the orchestration script
+4. ✅ Creating pull request and merging changes
+5. ✅ Configuring infrastructure variables and domain mappings
+6. ✅ Creating patrol branches in all application repositories
+7. ✅ Verifying workspace creation and pipeline execution
+8. ✅ Configuring Azure AD authentication for secure access
 
-=== Common Issues ===
+**Result:** Three fully functional Terraform Cloud workspaces for the Patrol environment with successful pipeline deployments and Azure AD authentication configured.
 
-==== FOSSA CLI Not Found ====
+**Important:** The Azure AD authentication setup (Phase 7) is a critical post-deployment step. Without it, users will not be able to access the patrol environment through the web interface.
 
-<syntaxhighlight lang="bash">
-# Install FOSSA CLI
-curl -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/fossas/fossa-cli/master/install-latest.sh | bash
-</syntaxhighlight>
+---
 
-==== Authentication Issues ====
+## Implementation Timeline
 
-<syntaxhighlight lang="bash">
-# Set FOSSA API key
-export FOSSA_API_KEY=your-api-key-here
-</syntaxhighlight>
+Typical timeline for creating patrol workspaces from start to finish:
 
-==== FOSSA Scan Failing in CI/CD ====
+| Phase | Task | Estimated Time |
+|---|---|---|
+| 1-3 | YAML configuration, validation, and JSON generation | 1-2 hours |
+| 4 | Infrastructure configuration | 30 minutes |
+| 5 | Creating application branches | 30-60 minutes |
+| 6 | Workspace verification and Terraform runs | 30 minutes |
+| 7 | Azure AD ticket submission | 15 minutes |
+| 7 | Azure AD configuration (waiting) | 2-5 business days |
+| **Total Active Work** | **~3-4 hours** | |
+| **Total Calendar Time** | **3-6 business days** | |
 
-If your FOSSA scan is failing in the pipeline:
+**Note:** Most of the calendar time is spent waiting for Azure AD configuration. The actual hands-on work can be completed in a single day.
 
-# '''Verify RUN_FOSSA_ANALYSIS is set''': Ensure <code>RUN_FOSSA_ANALYSIS: "true"</code> is in your job variables
-# '''Check template reference''': Confirm you're including the correct template from <code>engineering/pipelinecli</code>
-# '''Verify API key''': Confirm <code>FOSSA_API_KEY</code> is set in CI/CD variables (Settings → CI/CD → Variables)
-# '''Check template extension''': Make sure you're extending the right template for your language
-# '''Review Shield Pipeline docs''': Consult [https://shield-console.us.bank-dns.com/docs/default/component/plat-shieldplatform-shielddocs/extern/pipelinecli/ Shield Pipeline Documentation]
+---
 
-==== Template Not Found Error ====
+## Version History
 
-If you get an error about template not found:
+| Version | Date | Author | Changes |
+|---|---|---|---|
+| 1.0 | 2025-11-13 | Initial Author | Initial documentation creation |
 
-# Verify your include block references <code>engineering/pipelinecli</code>
-# Check that you're using <code>ref: latest</code> or a valid branch/tag
-# Ensure you have access to the pipelinecli repository
+---
 
-==== Go Module Issues ====
+## Quick Checklist
 
-<syntaxhighlight lang="bash">
-# Clear module cache
-go clean -modcache
-go mod download
-</syntaxhighlight>
+Use this checklist to track your progress when creating patrol workspaces:
 
-==== Python Virtual Environment Issues ====
+### Pre-Implementation
+- [ ] Verify you have admin access to pge-tfc-workspaces repository
+- [ ] Create GitHub Personal Access Token (PAT)
+- [ ] Set GH_TOKEN environment variable
+- [ ] Identify all application repositories that need patrol branches
 
-<syntaxhighlight lang="bash">
-# Pipenv
-pipenv --rm
-pipenv install
+### Phase 1-3: Workspace Configuration
+- [ ] Clone pge-tfc-workspaces repository
+- [ ] Create feature branch: `<lan-id>/<jira-ticket>`
+- [ ] Add patrolgraphinfra01 workspace block to wsv2-08.yaml
+- [ ] Add patrolqueriesinfra01 workspace block to wsv2-08.yaml
+- [ ] Add patrolwebappinfra01 workspace block to wsv2-08.yaml
+- [ ] Run orchestration.py script (validates YAML and generates JSON)
+- [ ] Fix any validation errors
+- [ ] Commit both YAML and generated JSON files
+- [ ] Create pull request
+- [ ] Wait for approval and merge
 
-# Poetry
-poetry env remove python
-poetry install
+### Phase 4: Infrastructure Configuration
+- [ ] Clone/navigate to webcore-infra repository
+- [ ] Checkout patrol branch (or create from dev)
+- [ ] Create tf/vars/patrol.tfvars file
+- [ ] Update tf/locals.tf with patrol workspace FQDNs
+- [ ] Update workspace_viewer_fqdn in locals.tf
+- [ ] Commit and push changes to patrol branch
 
-# Conda
-conda env remove -n python-conda-hello
-conda env create -f environment.yml
-</syntaxhighlight>
+### Phase 5: Application Repository Setup
+- [ ] Create patrol branch in webcore-infra
+- [ ] Create patrol branch in Engage-Graph
+- [ ] Create patrol branch in Engage-Queries-ECS
+- [ ] Create patrol branch in Engage-Webapp
+- [ ] Create patrol branch in Engage-Workorder-AtRisk-Sync
+- [ ] Create patrol branch in Engage-Workorder-Status-GIS-Sync
+- [ ] Create patrol branch in Engage-NLB-Manager
+- [ ] Add start:patrol scripts to package.json files (if needed)
+- [ ] Create .env.patrol configuration files (if needed)
 
-==== Node.js Lock File Conflicts ====
+### Phase 6: Validation and Deployment
+- [ ] Verify patrolgraphinfra01 exists in Terraform Cloud
+- [ ] Verify patrolqueriesinfra01 exists in Terraform Cloud
+- [ ] Verify patrolwebappinfra01 exists in Terraform Cloud
+- [ ] Trigger initial Terraform run for patrolgraphinfra01
+- [ ] Trigger initial Terraform run for patrolqueriesinfra01
+- [ ] Trigger initial Terraform run for patrolwebappinfra01
+- [ ] Verify engage-queries-patrol pipeline succeeds
+- [ ] Verify engage-graph-patrol pipeline succeeds
+- [ ] Verify engage-webapp-patrol pipeline succeeds
+- [ ] Verify all other patrol pipelines succeed
 
-<syntaxhighlight lang="bash">
-# NPM
-rm package-lock.json node_modules -rf
-npm install
+### Phase 7: Azure AD Configuration
+- [ ] Navigate to MyIT Services portal
+- [ ] Submit Azure AD Application Registration ticket
+- [ ] Include all required information (AppId, URL, AD Groups)
+- [ ] Wait for ticket resolution (2-5 business days)
+- [ ] Test access to https://engage-patrol.digitalcatalyst.pge.com
+- [ ] Verify successful authentication
+- [ ] Confirm application loads correctly
 
-# Yarn
-rm yarn.lock node_modules -rf
-yarn install
-</syntaxhighlight>
+### Post-Implementation
+- [ ] Document any issues encountered
+- [ ] Share knowledge with team
+- [ ] Update this documentation if needed
 
-==== Java Build Failures ====
+---
 
-<syntaxhighlight lang="bash">
-# Maven - clean and rebuild
-mvn clean install -U
+## Feedback
 
-# Gradle - clean and rebuild
-gradle clean build --refresh-dependencies
-</syntaxhighlight>
+For questions, issues, or improvements to this documentation, please contact:
+- **Team:** Engage DevOps
+- **Email:** engage-devops@pge.com
+- **Slack Channel:** #engage-devops
 
-==== C# Restore Issues ====
-
-<syntaxhighlight lang="bash">
-# Clear NuGet cache
-dotnet nuget locals all --clear
-dotnet restore --force
-</syntaxhighlight>
-
-=== Language-Specific Notes ===
-
-==== Python ====
-
-* Ensure virtual environments are activated before running tests
-* Some packages may require system-level dependencies (e.g., <code>psycopg2</code> needs PostgreSQL dev libraries)
-* Set <code>WORK_DIR</code> variable to point to your specific Python project directory
-
-==== Java ====
-
-* Gradle builds may take longer on first run due to dependency downloads
-* Ensure <code>JAVA_HOME</code> is set correctly
-
-==== Node.js ====
-
-* Use <code>nvm</code> (Node Version Manager) to manage multiple Node.js versions
-* Some packages may require native build tools
-* Ensure <code>node_modules/</code> is included in artifacts if needed by downstream jobs
-
-==== C# ====
-
-* Ensure .NET SDK version matches project requirements
-* Some packages may require Windows-specific dependencies
-
-----
-
-== Contributing ==
-
-To add a new language or package manager to the testing matrix:
-
-# Create a new directory: <code><language>_<package_manager>_hello/</code>
-# Add a simple "Hello World" application
-# Include at least 2-3 dependencies
-# Add unit tests
-# Create a <code>.gitlab-ci.yml</code> that:
-#* Includes the <code>engineering/pipelinecli</code> template
-#* Extends the appropriate language template
-#* Sets <code>RUN_FOSSA_ANALYSIS: "true"</code>
-# Create a README.md specific to that project
-# Update this wiki page
-# Test FOSSA scanning in your pipeline
-# Submit a merge request to the appropriate OSPO repository
-
-Refer to existing [https://gitlab.us.bank-dns.com/OSPO OSPO repositories] for configuration examples.
-
-----
-
-== References ==
-
-* [https://shield-console.us.bank-dns.com/docs/default/component/plat-shieldplatform-shielddocs/extern/pipelinecli/ Shield Pipeline Documentation] - '''Primary resource for CI/CD setup'''
-* [https://gitlab.us.bank-dns.com/engineering/pipelinecli/-/tree/latest/templates/plugins?ref_type=heads Pipeline Templates Repository]
-* [https://docs.fossa.com/ FOSSA Documentation]
-* [https://github.com/fossas/fossa-cli FOSSA CLI GitHub]
-* [https://fossa.com/learn License Compliance Best Practices]
-* [https://gitlab.us.bank-dns.com/OSPO OSPO GitLab Organization]
-
-----
-
-== License ==
-
-This testing matrix repository is for internal testing purposes. Individual projects may have different licenses - refer to each project's LICENSE file.
-
-----
-
-'''Last Updated''': November 13, 2025<br>
-'''Maintained By''': Development Team<br>
-'''FOSSA Version''': 3.x
