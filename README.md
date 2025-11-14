@@ -1,585 +1,309 @@
-# Creating Terraform Cloud Workspaces for the Patrol Environment
-
----
+# User Request Data Flow - Quick Reference
 
 ## Overview
-
-This document outlines the complete process for creating and configuring Terraform Cloud workspaces for the Patrol environment. The Patrol environment is a QA environment that requires dedicated infrastructure workspaces and corresponding application branches.
-
----
-
-## High-Level Workflow
-
-```
-1. Clone pge-tfc-workspaces repo
-   └─> Create feature branch
-       └─> Add workspace blocks to wsv2-08.yaml
-           └─> Run orchestration.py (validates YAML & generates JSON)
-               └─> Create PR and merge
-                   
-2. Configure webcore-infra repo
-   └─> Create patrol.tfvars
-       └─> Update locals.tf with domains
-           └─> Commit changes to patrol branch
-           
-3. Create patrol branches in all app repos
-   └─> Engage-Graph
-   └─> Engage-Queries-ECS
-   └─> Engage-Webapp
-   └─> Engage-Workorder-AtRisk-Sync
-   └─> Engage-Workorder-Status-GIS-Sync
-   └─> Engage-NLB-Manager
-   
-4. Verify workspace creation in Terraform Cloud
-   └─> Check all 3 workspaces exist
-       └─> Trigger initial Terraform runs
-           └─> Monitor pipeline executions
-           
-5. Submit MyIT ticket for Azure AD
-   └─> Wait for Azure AD configuration
-       └─> Test authentication and access
-           └─> ✅ Patrol environment ready!
-```
+This document provides a concise overview of how user requests flow from the browser through AWS infrastructure to your web application.
 
 ---
 
-## Table of Contents
+## Architecture Stack
 
-1. Prerequisites
-2. Architecture Overview
-3. Step-by-Step Implementation
-4. Infrastructure Configuration
-5. Application Repository Setup
-6. Validation and Deployment
-7. Azure AD Authentication Setup
-8. Troubleshooting
-9. References
-10. Implementation Timeline
-11. Quick Checklist
+```
+Browser → Route53 → CloudFront → WAF → CloudFront Cache → S3
+```
+
+**Components:**
+- **Route53**: DNS resolution
+- **CloudFront**: Global CDN with edge caching
+- **WAF**: Web Application Firewall (IP whitelist + AWS managed rules)
+- **S3**: Static web content hosting
+- **Origin Access Control (OAC)**: Secure CloudFront-to-S3 communication
 
 ---
 
-## 1. Prerequisites
+## Request Flow (8 Steps)
 
-### Access Requirements
+### 1️⃣ DNS Resolution
+```
+User enters: https://webapp.pge.com
+Route53 returns: d1234abcd.cloudfront.net
+```
 
-- Admin privileges to the `pge-tfc-workspaces` repository
-- Personal GitHub PAT (Personal Access Token) with appropriate permissions
-- Access to Terraform Cloud with appropriate workspace creation permissions
-- Read-only and apply AD group memberships configured
+### 2️⃣ TLS/SSL Handshake
+```
+CloudFront Edge Location (nearest to user)
+↓
+ACM Certificate validation
+↓
+Secure HTTPS connection established (TLS 1.2+)
+```
 
-### Tools Required
+### 3️⃣ WAF Security Check
+```
+Request → AWS WAF (us-east-1)
+↓
+Rule Priority 0: AWS Managed Rules (Known Bad Inputs)
+Rule Priority 1: IP Whitelist (PGE Corporate IPs) → ALLOW
+Default Action: BLOCK
+↓
+✅ Allowed OR ❌ Blocked (403 Forbidden)
+```
 
-- Git installed locally
-- Python 3.x installed (for running orchestration script)
-- Text editor or IDE
+**⚠️ Critical:** WAF MUST be in us-east-1 for CloudFront (AWS requirement)
 
-### Knowledge Required
+### 4️⃣ CloudFront Cache Check
+```
+Cache HIT → Return cached content immediately
+Cache MISS → Continue to origin (S3)
+```
 
-- Basic understanding of Terraform Cloud workspaces
-- Familiarity with Git branching and pull request workflows
-- Understanding of YAML/JSON configuration files
+### 5️⃣ CloudFront Function (SPAs only)
+```
+For Angular/React apps:
+Request: /dashboard → Rewritten to: /index.html
+(Enables client-side routing)
+```
+
+### 6️⃣ Origin Request via OAC
+```
+CloudFront signs request with AWS SigV4
+↓
+S3 Bucket Policy validates CloudFront identity
+↓
+Access granted (only CloudFront can access S3)
+```
+
+### 7️⃣ S3 Content Retrieval
+```
+S3 Bucket retrieves: index.html, assets, etc.
+Returns to CloudFront
+```
+
+### 8️⃣ Response to Browser
+```
+CloudFront caches response at edge
+Compresses content
+Adds security headers
+↓
+HTTPS response to browser
+↓
+Browser renders application
+```
 
 ---
 
-## 2. Architecture Overview
+## Complete Flow Diagram
 
-### Workspace Configuration Process
-
-**⚠️ Important:** Workspaces are defined in YAML files (`wsv2-*.yaml`), which are then validated and converted to JSON by the `orchestration.py` script. Both YAML (source) and JSON (generated) files are committed to the repository.
-
-### Workspaces Created
-
-Three Terraform Cloud workspaces were created for the Patrol environment:
-
-| Workspace Name | Purpose | Working Directory |
-|---|---|---|
-| `patrolgraphinfra01` | Graph service infrastructure | `tf` |
-| `patrolqueriesinfra01` | Queries service infrastructure | `tf` |
-| `patrolwebappinfra01` | Web application infrastructure | `tf` |
-
-### Application Repositories
-
-The following application repositories required `patrol` branches:
-
-- **webcore-infra** (Infrastructure configuration)
-- **Engage-Graph**
-- **Engage-Queries-ECS**
-- **Engage-Webapp**
-- **Engage-Workorder-AtRisk-Sync**
-- **Engage-Workorder-Status-GIS-Sync**
-- **Engage-NLB-Manager**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      USER BROWSER                           │
+│                https://webapp.pge.com                       │
+└────────────────────┬────────────────────────────────────────┘
+                     │ 1. DNS Query
+                     ↓
+┌────────────────────────────────────────────────────────────┐
+│                    ROUTE 53                                │
+│         Returns CloudFront domain name                     │
+└────────────────────┬───────────────────────────────────────┘
+                     │ 2. HTTPS Request
+                     ↓
+┌────────────────────────────────────────────────────────────┐
+│              CLOUDFRONT EDGE LOCATION                      │
+│                                                            │
+│  Step 3: ACM Certificate (TLS Handshake)                  │
+│          ↓                                                 │
+│  Step 4: AWS WAF Security Filter                          │
+│          ├─ AWS Managed Rules                             │
+│          ├─ IP Whitelist → ALLOW/BLOCK                    │
+│          ↓                                                 │
+│  Step 5: Cache Check (HIT or MISS)                        │
+│          ↓                                                 │
+│  Step 6: CloudFront Function (SPA routing)                │
+│          ↓                                                 │
+└────────────────────┬───────────────────────────────────────┘
+                     │ Origin Request (if cache miss)
+                     ↓
+┌────────────────────────────────────────────────────────────┐
+│         CLOUDFRONT ORIGIN ACCESS CONTROL                   │
+│           Signs request with AWS SigV4                     │
+└────────────────────┬───────────────────────────────────────┘
+                     │
+                     ↓
+┌────────────────────────────────────────────────────────────┐
+│                  S3 BUCKET POLICY                          │
+│       Validates CloudFront identity & SourceArn            │
+└────────────────────┬───────────────────────────────────────┘
+                     │
+                     ↓
+┌────────────────────────────────────────────────────────────┐
+│                    S3 BUCKET                               │
+│         /index.html, /assets/, /static/                    │
+│    Block all public access - CloudFront only               │
+└────────────────────┬───────────────────────────────────────┘
+                     │ Content retrieved
+                     ↓
+         ┌───────────────────────┐
+         │  CloudFront caches &  │
+         │  returns to browser   │
+         └───────────┬───────────┘
+                     │
+                     ↓
+┌────────────────────────────────────────────────────────────┐
+│                   USER BROWSER                             │
+│              Renders web application                       │
+└────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 3. Step-by-Step Implementation
+## Security Layers
 
-### Phase 1: Repository Setup
-
-#### Step 1: Clone the Workspace Repository
-
-```bash
-git clone https://github.com/pgetech/pge-tfc-workspaces
-cd pge-tfc-workspaces
-```
-
-#### Step 2: Create a Feature Branch
-
-Create a local branch following the naming convention: `<your-lan-id>/<jira-user-story>`
-
-```bash
-git checkout -b <your-lan-id>/<jira-ticket-id>
-```
-
-**Example:**
-```bash
-git checkout -b b1v6/CLOUDCOE-5414
-```
-
-#### Step 3: Locate the Workspace Configuration File
-
-Navigate to the workspace configuration files:
-```
-workspaces-aws/wsv2-08.yaml
-```
-
-**⚠️ Important:** You edit YAML files, not JSON. The orchestration script will generate JSON files from your YAML configuration.
+| Layer | Component | Protection |
+|-------|-----------|------------|
+| 1 | Route53 | DNS resolution, geo-restriction (US/CA) |
+| 2 | CloudFront | TLS 1.2+, HTTPS redirect, DDoS (Shield Standard) |
+| 3 | WAF | IP whitelist, AWS managed rules, default BLOCK |
+| 4 | OAC | Signed requests, prevents direct S3 access |
+| 5 | S3 | Block public access, bucket policy, optional KMS encryption |
 
 ---
 
-### Phase 2: Add Workspace Configurations
+## Request Scenarios
 
-#### Step 4: Add Workspace Blocks to YAML
-
-Add a workspace block for each of the three workspaces to the `wsv2-08.yaml` file.
-
-**Workspace Configuration Template (YAML):**
-
-```yaml
-<workspace-name>:
-  account: "471817339124"
-  apply_ad_groups: ["AWS-A2586-QA-Engage_Ops"]
-  auto_apply: false
-  branch: "patrol"
-  csp: "aws"
-  environment: "qa"
-  file_triggers_enabled: true
-  github_org: "PGEDigitalCatalyst"
-  github_repo: "webcore-infra"
-  project: "webcore"
-  read_only_ad_groups: ["AWS-A3113-Dev-TF_Developers"]
-  run_tasks: ["Wiz-QA"]
-  terraform_version: "1.9.8"
-  working_directory: "tf"
-  tags: ["patrol", "infra"]
+### ✅ Scenario 1: First-Time User
+```
+DNS → TLS → WAF (ALLOW) → Cache MISS → Origin Request → S3 → Cache → Browser
+Time: ~500ms-2s (depending on location)
 ```
 
-**Create three workspace blocks using this template with these names:**
-- `patrolgraphinfra01`
-- `patrolqueriesinfra01`
-- `patrolwebappinfra01`
+### ⚡ Scenario 2: Returning User (Cached)
+```
+DNS (cached) → TLS → WAF (ALLOW) → Cache HIT → Browser
+Time: ~50-200ms (served from edge)
+```
 
-**💡 Note:** The configuration is identical for all three workspaces except for the workspace name. You can copy the template and change only the workspace name.
+### ❌ Scenario 3: Blocked Request
+```
+DNS → TLS → WAF (BLOCK - IP not whitelisted) → 403 Forbidden
+Time: ~100ms (never reaches S3)
+```
 
-**Key Parameters:**
-- `account`: AWS account ID (471817339124 for QA)
-- `branch`: Git branch to monitor (patrol)
-- `environment`: Environment type (qa)
-- `apply_ad_groups`: AD group with apply permissions
-- `terraform_version`: Terraform version (1.9.8)
+### 🔄 Scenario 4: SPA Client Route
+```
+User navigates to: /dashboard
+CloudFront Function rewrites to: /index.html
+Browser receives index.html → React/Angular router handles /dashboard
+```
 
 ---
 
-### Phase 3: Validation
+## CI/CD Deployment Flow
 
-#### Step 5: Set GitHub PAT Environment Variable
-
-**For PowerShell users:**
-```powershell
-$Env:GH_TOKEN='ghp_XXX'
 ```
-
-**For Bash/Linux users:**
-```bash
-export GH_TOKEN='ghp_XXX'
+Developer pushes to GitHub
+    ↓
+GitHub Webhook triggers CodePipeline
+    ↓
+┌───────────────────────────────┐
+│ Source   → GitHub checkout    │
+│ Build    → npm install & build│
+│ Sonarqube → Code quality scan │
+│ Deploy   → Sync S3 + Invalidate CloudFront
+└───────────────────────────────┘
+    ↓
+Users get new content in ~5-15 minutes
 ```
-
-#### Step 6: Run the Orchestration Script
-
-The `orchestration.py` script validates your YAML configuration and generates the corresponding JSON files.
-
-**Validate and generate JSON:**
-```bash
-python ./scripts/orchestration.py -w internal/aws/json/workspaces -f wsv2-08 -a
-```
-
-**The script will:**
-- Validate that repository and branch exist
-- Check all required fields are present
-- Generate `wsv2-08.json` from `wsv2-08.yaml`
-
-#### Step 7: Commit and Push Changes
-
-```bash
-git add workspaces-aws/wsv2-08.yaml workspaces-aws/wsv2-08.json
-git commit -m "feat: add patrol workspaces for graph, queries, and webapp"
-git push origin <your-branch-name>
-```
-
-**💡 Note:** Commit both the YAML source file and the generated JSON file.
-
-#### Step 8: Create Pull Request
-
-1. Navigate to the GitHub repository
-2. Create a pull request from your branch to `main`
-3. Add appropriate reviewers
-4. Wait for approval and merge
 
 ---
 
-## 4. Infrastructure Configuration
+## Key Configuration
 
-### Phase 4: Configure webcore-infra Repository
+### Application Types
+- `html` - Static HTML sites (no CloudFront Function)
+- `angular` - Angular SPAs (with CloudFront Function for routing)
+- `react` - React SPAs (with CloudFront Function for routing)
+- `custom` - Custom configuration
 
-Once the workspaces are created in Terraform Cloud, you need to configure the infrastructure repository.
+### WAF Options
+- `internal` - Module creates WAF in us-east-1 (recommended)
+- `external` - Use existing WAF Web ACL via SSM parameter
 
-#### Step 9: Create patrol.tfvars File
+### Logging Locations
+- **CloudFront**: `s3://pge-{ACCOUNT}-cloudfront/`
+- **WAF**: `s3://aws-waf-logs-{ACCOUNT}-us-east-1/`
+- **S3 Access**: `s3://ccoe-s3-accesslogs-spoke-{REGION}-{ACCOUNT}/`
 
-In the `webcore-infra` repository, create: `tf/vars/patrol.tfvars`
+---
+
+## Troubleshooting Quick Guide
+
+| Issue | Likely Cause | Solution |
+|-------|--------------|----------|
+| 403 Forbidden | IP not in WAF whitelist | Check WAF IP Set |
+| 404 on SPA routes | CloudFront Function missing | Verify `s3web_type` is "angular" or "react" |
+| Stale content | Cache not invalidated | CodePipeline should auto-invalidate; check deploy logs |
+| Slow load | Large bundle size | Implement code splitting, optimize images |
+| SSL error | Certificate issue | Verify ACM cert in us-east-1, check domain validation |
+
+---
+
+## Important Notes
+
+1. **WAF Region**: WAF for CloudFront MUST be in us-east-1 (AWS requirement)
+2. **S3 Access**: No direct S3 access - only via CloudFront OAC
+3. **Cache Invalidation**: Automatic during deployment via CodePipeline
+4. **HTTPS Only**: HTTP requests automatically redirected to HTTPS
+5. **Geo-Restriction**: Only US and Canada allowed by default
+
+---
+
+## Quick Reference - Terraform Modules
 
 ```hcl
-app_id              = "2586"
-data_classification = "Internal"
-cris                = "Low"
-notify              = ["engage-devops@pge.com"]
-owner               = ["A1P2", "C1MP", "C3T1"]
-compliance          = ["None"]
-order               = "70039360"
+# S3 Web Module - Main infrastructure
+module "webapp" {
+  source  = "app.terraform.io/pgetech/s3web/aws"
+  version = "0.0.33"
+  
+  s3web_type         = "custom"  # or "html", "angular", "react"
+  s3web_pge_waf      = "external" # or "internal"
+  custom_domain_name = "webapp.pge.com"
+  github_repo_url    = "https://github.com/ORG/REPO.git"
+  github_branch      = "main"
+}
+
+# Pipeline Module - CI/CD
+module "pl_webapp" {
+  source  = "app.terraform.io/pgetech/mrad-webcore-plweb/aws"
+  version = "0.2.1"
+  
+  repo_name                  = "Webapp"
+  git_branch                 = "main"
+  s3_bucket_id               = module.webapp[0].s3_bucket_id
+  cloudfront_distribution_id = module.webapp[0].cloudfront_distribution_id
+}
 ```
 
-**💡 Tip:** These values are specific to the Engage application. Adjust based on your application's requirements.
+---
 
-#### Step 10: Update locals.tf
+## Performance Tips
 
-Add patrol workspace FQDN (Fully Qualified Domain Name) mappings to `tf/locals.tf`.
-
-**In the `workspace_webapp_fqdn` block, add:**
-
-```hcl
-"patrolgraphinfra01"    = "engage-patrol.digitalcatalyst.pge.com"
-"patrolqueriesinfra01"  = "engage-patrol.digitalcatalyst.pge.com"
-"patrolwebappinfra01"   = "engage-patrol.digitalcatalyst.pge.com"
-```
-
-**In the `workspace_viewer_fqdn` block, add:**
-
-```hcl
-"patrolinfra03" = "viewer-patrol.dc.pge.com"
-```
-
-**💡 Note:** Webapp patrol workspace use the same domain: `engage-patrol.digitalcatalyst.pge.com`
+✅ Enable code splitting for SPAs  
+✅ Optimize images (use WebP format)  
+✅ Set proper cache headers in S3 metadata  
+✅ Use CloudFront compression (automatic)  
+✅ Minimize bundle size (tree-shaking, lazy loading)  
 
 ---
 
-## 5. Application Repository Setup
+## Support
 
-### Phase 5: Create Patrol Branches
-
-**⚠️ Critical:** The Terraform Cloud workspaces will trigger pipeline runs when changes are detected on the `patrol` branch. If the branches don't exist, the pipelines will fail.
-
-#### Step 11: Create patrol Branch in Each Application Repository
-
-For each of the following repositories, create a `patrol` branch:
-
-1. **webcore-infra**
-2. **Engage-Graph**
-3. **Engage-Queries-ECS**
-4. **Engage-Webapp**
-5. **Engage-Workorder-AtRisk-Sync**
-6. **Engage-Workorder-Status-GIS-Sync**
-7. **Engage-NLB-Manager**
-
-**Commands for each repository:**
-
-```bash
-# Clone the repository
-git clone https://github.com/PGEDigitalCatalyst/<repository-name>
-cd <repository-name>
-
-# Create patrol branch from dev (or main)
-git checkout dev
-git pull origin dev
-git checkout -b patrol
-git push origin patrol
-```
-
-#### Step 12: Update Application Configuration (If Needed)
-
-Some repositories may require additional configuration:
-
-**Add patrol script to `package.json`:**
-```json
-"start:patrol": "dotenvx run -f .env -f .env.patrol --overload -- pm2-runtime start ecosystem.config.js"
-```
-
-**Create `.env.patrol` file (if using environment files):**
-```bash
-NODE_ENV=patrol
-API_URL=https://engage-patrol.digitalcatalyst.pge.com
-# ... other patrol-specific variables
-```
-
-**ℹ️ Note:** Not all repositories require these changes. Check if your application uses environment-specific configurations.
+- **Module Owner**: PGE Cloud Center of Excellence (CCoE)
+- **Documentation**: https://wiki.comp.pge.com/display/CCE/Terraform-S3Web
+- **Terraform Registry**: https://app.terraform.io/app/pgetech/registry/modules
 
 ---
 
-## 6. Validation and Deployment
+**For detailed information, see `REQUEST_DATA_FLOW.md`**
 
-### Phase 6: Verify Workspace Creation
-
-#### Step 14: Verify Workspaces in Terraform Cloud
-
-1. Log in to Terraform Cloud: https://app.terraform.io
-2. Navigate to the `webcore` project
-3. Confirm all three workspaces exist:
-   - patrolgraphinfra01
-   - patrolqueriesinfra01
-   - patrolwebappinfra01
-
-#### Step 15: Check Pipeline Execution
-
-Search for "patrol" in your CI/CD platform. Expected pipelines:
-- engage-queries-patrol
-- engage-graph-patrol
-- engage-webapp-patrol
-- Other lambda-related patrol pipelines
-
-**All should show "Succeeded" status.**
-
-#### Step 16: Run Initial Terraform Apply
-
-For each workspace, trigger a run in Terraform Cloud and review/approve the plan.
-
----
-
-## 7. Azure AD Authentication Setup
-
-### Phase 7: Configure Azure AD Application Registration
-
-After the infrastructure is deployed and the domain is accessible, you need to configure Azure AD authentication.
-
-#### Symptom
-
-When accessing the patrol domain (e.g., `https://engage-patrol.digitalcatalyst.pge.com`), you encounter an Azure AD authentication error:
-
-```
-AADSTS50011: The redirect URI 'https://engage-patrol.digitalcatalyst.pge.com/redirect' 
-specified in the request does not match the redirect URIs configured for the application.
-```
-
-#### Solution
-
-Submit a MyIT Services request to configure Azure AD authentication for the patrol environment.
-
-#### Required Information for the Ticket
-
-| Field | Value |
-|---|---|
-| **Request Type** | Azure AD Application Registration |
-| **AppId** | 2586 |
-| **Application Name** | Engage - MRAD |
-| **Environment Type** | QA |
-| **Application Internal URL** | `https://engage-patrol.digitalcatalyst.pge.com` |
-| **Desired App Name** | `engage-patrol-pgedev.msappproxy.net` |
-| **AWS Account Number** | 471817339124 |
-
-**AD Groups Requiring Access:**
-- AAD-Apr-A2586-Non-Prod-Engage-Supervisor-QA-AzureAD
-- AAD-Apr-A2586-Non-Prod-PTT-Supervisor-QA-AzureAD
-- AAD-Apr-A2586-Non-Prod-ET-Supervisor-QA-AzureAD
-- AAD-Apr-A2586-Non-Prod-ET-RO-Supervisor-QA-AzureAD
-- AAD-Apr-A2586-Non-Prod-Engage-Admin-QA-AzureAD
-
-**💡 Tip:** Customize these values based on your application's specific requirements and AD groups.
-
-#### Ticket Submission & Timeline
-
-1. Navigate to MyIT Services portal: https://iis101.cloud.pge.com/MyITServices/
-2. Search for "Azure AD Application Registration"
-3. Submit ticket with the information above
-4. **Expected resolution:** 2-5 business days
-
-#### Verification After Resolution
-
-Once the ticket is resolved:
-
-1. Navigate to `https://engage-patrol.digitalcatalyst.pge.com`
-2. Click "Sign In"
-3. Authenticate with your PG&E credentials
-4. Verify successful login and access to the application
-
-**⚠️ Note:** This step is critical and must be completed before users can access the patrol environment. Without proper Azure AD configuration, all authentication attempts will fail.
-
----
-
-## 8. Troubleshooting
-
-### Common Issues and Solutions
-
-#### Issue 1: Pipeline Fails - "Branch not found"
-**Solution:** Create the `patrol` branch in all application repositories (see Phase 5, Step 11).
-
-#### Issue 2: Orchestration Script Validation Fails
-**Solution:** Check JSON syntax, ensure all mandatory fields are present, and verify repo/branch exist in GitHub.
-
-#### Issue 3: Terraform Plan Fails
-**Solution:** Verify `patrol.tfvars` exists and is properly formatted with all required variables.
-
-#### Issue 4: Domain Name Resolution Issues
-**Solution:** Verify domain mappings in `locals.tf` and check DNS/load balancer configurations.
-
-#### Issue 5: Permission Denied Errors
-**Solution:** Verify admin access to repository, check AD group memberships, and ensure GitHub PAT has proper permissions.
-
-#### Issue 6: Azure AD Authentication Error (AADSTS50011)
-**Solution:** This is expected before Azure AD configuration. Submit MyIT ticket as described in Phase 7. Resolution time: 2-5 business days.
-
----
-
-## 9. References
-
-### Key Links
-- **Workspace Repo:** https://github.com/pgetech/pge-tfc-workspaces
-- **Infrastructure Repo:** https://github.com/PGEDigitalCatalyst/webcore-infra
-- **Terraform Cloud:** https://app.terraform.io
-- **MyIT Services:** https://iis101.cloud.pge.com/MyITServices/
-
-### Key Files
-- `workspaces-aws/wsv2-08.yaml` - Workspace definitions (source)
-- `workspaces-aws/wsv2-08.json` - Generated workspace JSON
-- `scripts/orchestration.py` - Validation and generation script
-- `tf/vars/patrol.tfvars` - Environment variables
-- `tf/locals.tf` - Domain mappings
-
----
-
-## 10. Summary
-
-This document covered the complete process of creating Terraform Cloud workspaces for the Patrol environment, including:
-
-1. ✅ Cloning and configuring the workspace repository
-2. ✅ Adding workspace configurations to `wsv2-08.yaml`
-3. ✅ Running validation with the orchestration script
-4. ✅ Creating pull request and merging changes
-5. ✅ Configuring infrastructure variables and domain mappings
-6. ✅ Creating patrol branches in all application repositories
-7. ✅ Verifying workspace creation and pipeline execution
-8. ✅ Configuring Azure AD authentication for secure access
-
-**Result:** Three fully functional Terraform Cloud workspaces for the Patrol environment with successful pipeline deployments and Azure AD authentication configured.
-
-**⚠️ Important:** The Azure AD authentication setup (Phase 7) is a critical post-deployment step. Without it, users will not be able to access the patrol environment through the web interface.
-
----
-
-## 11. Implementation Timeline
-
-Typical timeline for creating patrol workspaces from start to finish:
-
-| Phase | Task | Estimated Time |
-|---|---|---|
-| 1-3 | YAML configuration, validation, and JSON generation | 1-2 hours |
-| 4 | Infrastructure configuration | 30 minutes |
-| 5 | Creating application branches | 30-60 minutes |
-| 6 | Workspace verification and Terraform runs | 30 minutes |
-| 7 | Azure AD ticket submission | 15 minutes |
-| 7 | Azure AD configuration (waiting) | 2-5 business days |
-| **Total Active Work** | **~3-4 hours** | |
-| **Total Calendar Time** | **3-6 business days** | |
-
-**ℹ️ Note:** Most of the calendar time is spent waiting for Azure AD configuration. The actual hands-on work can be completed in a single day.
-
----
-
-## 12. Quick Checklist
-
-Use this checklist to track your progress when creating patrol workspaces:
-
-### Pre-Implementation
-- [ ] Verify you have admin access to pge-tfc-workspaces repository
-- [ ] Create GitHub Personal Access Token (PAT)
-- [ ] Set GH_TOKEN environment variable
-- [ ] Identify all application repositories that need patrol branches
-
-### Phase 1-3: Workspace Configuration
-- [ ] Clone pge-tfc-workspaces repository
-- [ ] Create feature branch: `<lan-id>/<jira-ticket>`
-- [ ] Add patrolgraphinfra01 workspace block to wsv2-08.yaml
-- [ ] Add patrolqueriesinfra01 workspace block to wsv2-08.yaml
-- [ ] Add patrolwebappinfra01 workspace block to wsv2-08.yaml
-- [ ] Run orchestration.py script (validates YAML and generates JSON)
-- [ ] Fix any validation errors
-- [ ] Commit both YAML and generated JSON files
-- [ ] Create pull request
-- [ ] Wait for approval and merge
-
-### Phase 4: Infrastructure Configuration
-- [ ] Clone/navigate to webcore-infra repository
-- [ ] Checkout patrol branch (or create from dev)
-- [ ] Create tf/vars/patrol.tfvars file
-- [ ] Update tf/locals.tf with patrol workspace FQDNs
-- [ ] Update workspace_viewer_fqdn in locals.tf
-- [ ] Commit and push changes to patrol branch
-
-### Phase 5: Application Repository Setup
-- [ ] Create patrol branch in webcore-infra
-- [ ] Create patrol branch in Engage-Graph
-- [ ] Create patrol branch in Engage-Queries-ECS
-- [ ] Create patrol branch in Engage-Webapp
-- [ ] Create patrol branch in Engage-Workorder-AtRisk-Sync
-- [ ] Create patrol branch in Engage-Workorder-Status-GIS-Sync
-- [ ] Create patrol branch in Engage-NLB-Manager
-- [ ] Add start:patrol scripts to package.json files (if needed)
-- [ ] Create .env.patrol configuration files (if needed)
-
-### Phase 6: Validation and Deployment
-- [ ] Verify patrolgraphinfra01 exists in Terraform Cloud
-- [ ] Verify patrolqueriesinfra01 exists in Terraform Cloud
-- [ ] Verify patrolwebappinfra01 exists in Terraform Cloud
-- [ ] Trigger initial Terraform run for patrolgraphinfra01
-- [ ] Trigger initial Terraform run for patrolqueriesinfra01
-- [ ] Trigger initial Terraform run for patrolwebappinfra01
-- [ ] Verify engage-queries-patrol pipeline succeeds
-- [ ] Verify engage-graph-patrol pipeline succeeds
-- [ ] Verify engage-webapp-patrol pipeline succeeds
-- [ ] Verify all other patrol pipelines succeed
-
-### Phase 7: Azure AD Configuration
-- [ ] Navigate to MyIT Services portal
-- [ ] Submit Azure AD Application Registration ticket
-- [ ] Include all required information (AppId, URL, AD Groups)
-- [ ] Wait for ticket resolution (2-5 business days)
-- [ ] Test access to https://engage-patrol.digitalcatalyst.pge.com
-- [ ] Verify successful authentication
-- [ ] Confirm application loads correctly
-
-### Post-Implementation
-- [ ] Document any issues encountered
-- [ ] Share knowledge with team
-- [ ] Update this documentation if needed
-
----
-
-## Feedback
-
-For questions, issues, or improvements to this documentation, please contact:
-- **Team:** Engage DevOps
-- **Email:** engage-devops@pge.com
-- **Slack Channel:** #engage-devops
-
----
-
-**Document Version:** 1.0  
-**Last Updated:** November 14, 2025  
-**Author:** DevOps Team
+**Last Updated**: November 14, 2024
 
