@@ -75,14 +75,15 @@ location ~ ^/engage/?(.*)\$ {
 **Services:**
 - **Queries Service** - Read operations
 - **Proxy Service** - Write/workflow operations
-- **Poller Service** - Background polling tasks
+- **Poller Service** - Background polling tasks; syncs data from Couchbase to Neptune via SQS
 
 **Backend Integrations:**
 - Neptune (graph database)
 - GIS (Geographic Information System)
 - Couchbase Sync Gateway
 - SAP
-- Event queues and Lambda functions
+- SQS (Simple Queue Service) - Message queue for data synchronization
+- Lambda functions
 
 ---
 
@@ -92,6 +93,17 @@ location ~ ^/engage/?(.*)\$ {
 |-------------|-----------|
 | **Static Assets** | Browser → CloudFront → S3 Webapp Bucket |
 | **Dynamic API** | Browser → CloudFront → F5 → NGINX → ALB → Services → Datastores |
+
+---
+
+## Backend Data Synchronization
+
+**Couchbase → Neptune Sync Flow:**
+```
+Couchbase Sync Gateway → Poller Service → SQS → Lambda → Neptune
+```
+
+The Poller Service monitors changes in Couchbase and publishes messages to SQS queues for asynchronous processing, ensuring data consistency between Couchbase and the Neptune graph database.
 
 ---
 
@@ -114,9 +126,4 @@ location ~ ^/engage/?(.*)\$ {
 ✓ Include all infrastructure components (CloudFront, F5, NGINX)  
 ✓ Detail each layer's responsibilities  
 ✓ Provide configuration examples where applicable  
-
----
-
-**Prepared by:** Kayode Akintade  
-**Last Updated:** November 17, 2025
 
