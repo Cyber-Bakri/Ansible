@@ -127,3 +127,8 @@ The Poller Service monitors changes in Couchbase and publishes messages to SQS q
 ✓ Detail each layer's responsibilities  
 ✓ Provide configuration examples where applicable  
 
+---
+
+**Prepared by:** Kayode Akintade  
+**Last Updated:** November 17, 2025
+
