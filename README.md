@@ -1,134 +1,103 @@
-# User Request Flow: Browser → CloudFront → F5 → NGINX → Engage Webapp
+# Terraform Deployment Resources Analysis
 
-## Overview
-This document outlines the data flow path for user requests from the browser through our enterprise infrastructure to the Engage Web Application.
-
----
-
-## Architecture Flow
-
-```
-Browser → CloudFront → F5 → NGINX (ECS/Fargate) → ALB → Engage Services → Datastores
-```
+**Date:** November 18, 2025  
+**Status:** 🟡 Partially Complete - Blocked
 
 ---
 
-## Component Breakdown
+## Resources Successfully Created ✅
 
-### 1. **Browser**
-- User accesses: `https://engage.<company>.com`
-- Initiates HTTPS request over public internet
+### S3 Storage (Main Application)
+- `aws_s3_bucket.default` - id=s3web-teaching-louse
+- `aws_s3_bucket_acl.default` - id=s3web-teaching-louse
+- `aws_s3_bucket_cors_configuration.default[0]`
+- `aws_s3_bucket_logging.default[0]`
+- `aws_s3_bucket_ownership_controls.default`
+- `aws_s3_bucket_policy.default`
+- `aws_s3_bucket_public_access_block.default`
+- `aws_s3_bucket_server_side_encryption_configuration.default`
+- `aws_s3_bucket_versioning.default`
+- `aws_s3_bucket_website_configuration.this[0]`
+- `aws_s3_object.index_html` - id=index.html
 
-### 2. **CloudFront (CDN + Edge Layer)**
-**Responsibilities:**
-- Global CDN edge caching
-- TLS termination and AWS WAF security
-- Serves static assets (HTML, JS, CSS) directly from S3 Webapp bucket
-- Forwards dynamic/API requests to backend layers
+### S3 Storage (Pipeline Logs)
+- `aws_s3_bucket.default` - id=engage-webapp-prod-pipeline-logs
+- `aws_s3_bucket_acl.default`
+- `aws_s3_bucket_ownership_controls.default`
+- `aws_s3_bucket_policy.default`
+- `aws_s3_bucket_public_access_block.default`
+- `aws_s3_bucket_server_side_encryption_configuration.default`
+- `aws_s3_bucket_versioning.default`
 
-**Traffic Split:**
-- **Static content** → Served from S3 via CloudFront
-- **Dynamic requests** → Forwarded to F5/ALB
+### CI/CD Pipeline
+- `aws_codebuild_project.build` - id=arn:aws:codebuild:us-west-2:712640...
+- `aws_codebuild_project.deploy`
+- `aws_codebuild_resource_policy.codebuild_resource...`
+- `aws_codebuild_source_credential.codebuild_source...`
+- `aws_codepipeline.pipeline`
+- `aws_codepipeline_webhook.pipeline_webhook`
+- `aws_codepipeline_webhook.codepipeline_webhook` - id=arn:aws:codepipeline:us-west-2:712...
 
-### 3. **F5 (Network Gateway)**
-**Responsibilities:**
-- External-to-internal network bridging
-- Enterprise security policy enforcement
-- Load balancing and SSL offloading (if configured)
-- Routes traffic to internal services
+### GitHub Integration
+- `github_repository_webhook.repo_webhook` - id=579774310
 
-### 4. **NGINX (Reverse Proxy & Auth Layer)**
-**Deployment:** ECS Fargate within Engage Web stack
+### Certificates
+- `aws_acm_certificate.acm_certificate` - id=arn:aws:acm:us-east-1:712640766496...
+- `aws_acm_certificate_validation.certificate_validation[0]`
 
-**Responsibilities:**
-- Entry-point routing for `/engage/*` endpoints
-- Request forwarding to backend services (Queries, Proxy, Poller)
-- Header injection and caching bypass logic
-- Keepalive and connection management
-- Entra Auth integration for authentication validation
+### Misc
+- `random_password.webhook_secret` - id=none
+- `random_password.referer[0]` - id=none
+- `random_pet.s3web` - id=teaching-louse
+- `time_sleep.wait_for_aws_s3_bucket_settings` - id=2025-11-07T23:25:43Z
 
-**Example Configuration:**
-```nginx
-# Set the engage production server
-location ~ ^/engage/?(.*)\$ {
-    set $fqdn d34jzp2avuov5.cloudfront.net;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection 'upgrade';
-    proxy_set_header Host engage.digitalcatalyst.pge.com;
-    proxy_cache_bypass $http_upgrade;
-    proxy_ssl_server_name on;
-    
-    keepalive_requests 1000;
-    keepalive_timeout 360s;
-    proxy_read_timeout 360s;
-    
-    proxy_pass https://$fqdn:443/engage/$1$is_args$args;
-}
-```
-
-### 5. **Application Load Balancer (ALB)**
-- Routes requests from NGINX to appropriate microservices
-- Health checks and service distribution
-
-### 6. **Engage Microservices**
-**Services:**
-- **Queries Service** - Read operations
-- **Proxy Service** - Write/workflow operations
-- **Poller Service** - Background polling tasks; syncs data from Couchbase to Neptune via SQS
-
-**Backend Integrations:**
-- Neptune (graph database)
-- GIS (Geographic Information System)
-- Couchbase Sync Gateway
-- SAP
-- SQS (Simple Queue Service) - Message queue for data synchronization
-- Lambda functions
+**Total:** ~30+ resources created successfully
 
 ---
 
-## Request Type Routing
+## Resources FAILED ❌
 
-| Request Type | Flow Path |
-|-------------|-----------|
-| **Static Assets** | Browser → CloudFront → S3 Webapp Bucket |
-| **Dynamic API** | Browser → CloudFront → F5 → NGINX → ALB → Services → Datastores |
+### 1. Route53 DNS Record
+- **Resource:** `aws_route53_record.acm_r53record_update["engage.digitalcatalyst.pge.com"]`
+- **Domain:** engage.digitalcatalyst.pge.com
+- **Issue:** Hosted zone managed by CCoe/FER team in different workspace
 
----
-
-## Backend Data Synchronization
-
-**Couchbase → Neptune Sync Flow:**
-```
-Couchbase Sync Gateway → Poller Service → SQS → Lambda → Neptune
-```
-
-The Poller Service monitors changes in Couchbase and publishes messages to SQS queues for asynchronous processing, ensuring data consistency between Couchbase and the Neptune graph database.
+### 2. CloudFront Distribution
+- **Resource:** `aws_cloudfront_distribution.cf_distribution`
+- **Issue:** Creation failed (dependent on Route53 or managed by CCoe)
 
 ---
 
-## Important Notes
+## Resources NOT Under Our Control
 
-### CloudFront Distribution Update
-- **Current CF Distribution:** `d34jzp2avuov5.cloudfront.net`
-- If the CloudFront distribution changes, update configuration in: [nginx-ecs-fargate](https://github.com/PGEDigitalCatalyst/nginx-ecs-fargate)
-- Reference PRs: [#516](https://github.com/PGEDigitalCatalyst/nginx-ecs-fargate/pull/516), [#517](https://github.com/PGEDigitalCatalyst/nginx-ecs-fargate/pull/517)
-
-### Environment Branching Strategy
-- **DEV changes** → Merge to `development` branch
-- **QA changes** → Merge to `main` branch
-- **Prod changes** → Merge to `production` branch
+- **Route53 Hosted Zone** for `digitalcatalyst.pge.com` → CCoe team
+- **CloudFront Distribution** → CCoe team or blocked by Route53
 
 ---
 
-## Acceptance Criteria
-✓ Document complete request flow from browser to web layer  
-✓ Include all infrastructure components (CloudFront, F5, NGINX)  
-✓ Detail each layer's responsibilities  
-✓ Provide configuration examples where applicable  
+## Required: CCoe Team Action
+
+### Option A (Primary)
+CCoe team must:
+1. Delegate `engage.digitalcatalyst.pge.com` subdomain OR grant Route53 permissions
+2. Clarify CloudFront ownership and provide access if needed
+
+### Plan B (Rollback)
+If deployment fails:
+1. Keep current running infrastructure
+2. Remove failed resources from Terraform state:
+   ```bash
+   terraform state rm 'module.webapp[0].aws_route53_record.acm_r53record_update["engage.digitalcatalyst.pge.com"]'
+   terraform state rm 'module.webapp[0].aws_cloudfront_distribution.cf_distribution'
+   ```
+3. Manual DNS update via CCoe or use existing CloudFront
 
 ---
 
-**Prepared by:** Kayode Akintade  
-**Last Updated:** November 17, 2025
+## Next Steps
 
+- [ ] Contact CCoe team for Route53 & CloudFront access
+- [ ] Get timeline confirmation from @Suresh Kumar Kandiah
+- [ ] Determine release date based on CCoe response
+
+**Blocker:** Waiting on CCoe team for 2 resources
