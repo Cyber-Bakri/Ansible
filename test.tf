@@ -36,3 +36,53 @@ resource "aws_neptune_cluster" "neptune_db_cluster" {
 
   tags = var.tags
 }
+
+resource "aws_neptune_cluster_parameter_group" "neptune_db_cluster" {
+  family      = "neptune1.3"
+  name        = "${var.prefix}-neptune-cluster-${lower(var.suffix)}"
+  description = "Engage Neptune cluster parameter group"
+  tags        = var.tags
+  
+  parameter {
+    name  = "neptune_enable_audit_log"
+    value = 1
+  }
+  
+  parameter {
+    name  = "neptune_enable_slow_query_log"
+    value = "info"
+  }
+}
+
+resource "aws_neptune_cluster_instance" "neptune_db_instance" {
+  count                        = local.neptune_instance_count
+  cluster_identifier           = aws_neptune_cluster.neptune_db_cluster.id
+  identifier                   = "${var.prefix}${var.suffix}${format("%02s", count.index)}"
+  instance_class               = local.neptune_db_instance_class
+  promotion_tier               = count.index + 1
+  neptune_parameter_group_name = aws_neptune_parameter_group.neptune_db_instance.name
+  
+  # Explicitly set availability zone to ensure each instance is in a separate AZ
+  availability_zone = element([
+    data.aws_subnet.ared1.availability_zone,
+    data.aws_subnet.ared2.availability_zone,
+    data.aws_subnet.ared3.availability_zone
+  ], count.index)
+
+  tags = var.tags
+
+  depends_on = [
+    aws_neptune_cluster.neptune_db_cluster
+  ]
+}
+
+resource "aws_neptune_parameter_group" "neptune_db_instance" {
+  family = "neptune1.3"
+  name   = "${var.prefix}-neptune-instance-${lower(var.suffix)}"
+  tags   = var.tags
+  
+  parameter {
+    name  = "neptune_result_cache"
+    value = "1"
+  }
+}
