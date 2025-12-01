@@ -47,53 +47,6 @@ module "lambda_logs" {
   tags    = var.tags
 }
 
-resource "aws_lambda_permission" "cloudwatch_event" {
-  statement_id  = "${local.lambda_name}-cloudwatch"
-  action        = "lambda:InvokeFunction"
-  function_name = local.lambda_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.ssm_parameter_change.arn
-}
-
-# when the SSM parameter is updated, the Lambda will be triggered
-resource "aws_cloudwatch_event_rule" "ssm_parameter_change" {
-  name        = "${local.lambda_name}-ssm-trigger"
-  description = "Triggers Lambda when SSM parameter changes"
-  event_pattern = jsonencode({
-    "source" : [
-      "aws.ssm"
-    ],
-    "detail-type" : [
-      "Parameter Store Change"
-    ],
-    "account" : [
-      local.account_num
-    ],
-    "resources" : [
-      "arn:aws:ssm:us-west-2:${local.account_num}:parameter/webcore/${var.suffix}/active-neptune-cluster"
-    ],
-    "detail" : {
-      "operation" : [
-        "Create",
-        "Update",
-        "Delete",
-        "LabelParameterVersion"
-      ]
-    }
-  })
-  tags = var.tags
-}
-
-resource "aws_cloudwatch_event_target" "invoke_lambda" {
-  rule = aws_cloudwatch_event_rule.ssm_parameter_change.name
-  arn  = module.nlbman_lambda.lambda_arn
-}
-
-resource "aws_cloudwatch_event_target" "sns_notify" {
-  rule = aws_cloudwatch_event_rule.ssm_parameter_change.name
-  arn  = "arn:aws:sns:us-west-2:${local.account_num}:webcore_notify"
-}
-
 module "nlbman_sumo" {
   source  = "app.terraform.io/pgetech/mrad-sumo/aws"
   version = "0.0.11"
@@ -110,17 +63,11 @@ module "nlbman_sumo" {
   TFC_CONFIGURATION_VERSION_GIT_BRANCH = var.git_branch
 }
 
-# ==========================================
-# Neptune Event Handling Resources
-# ==========================================
-
-# SNS Topic to receive Neptune event notifications
 resource "aws_sns_topic" "engage_neptune_events_topic" {
   name = "engage_neptune_events_topic-${var.suffix}"
   tags = var.tags
 }
 
-# Neptune Event Subscription - monitors db_instance level events
 resource "aws_neptune_event_subscription" "engage_neptune_events_sub" {
   name          = "engage-neptune-events-sub-${var.suffix}"
   sns_topic_arn = aws_sns_topic.engage_neptune_events_topic.arn
@@ -136,14 +83,12 @@ resource "aws_neptune_event_subscription" "engage_neptune_events_sub" {
   tags = var.tags
 }
 
-# SNS Topic Subscription - connects SNS topic to Lambda function (NLB Manager)
 resource "aws_sns_topic_subscription" "engage_neptune_topic_nlblambda" {
   topic_arn = aws_sns_topic.engage_neptune_events_topic.arn
   protocol  = "lambda"
   endpoint  = module.nlbman_lambda.lambda_arn
 }
 
-# Lambda Permission - allows SNS to invoke Lambda function
 resource "aws_lambda_permission" "allow_sns_invoke_engage_nlbman" {
   statement_id  = "AllowExecutionFromSNS"
   action        = "lambda:InvokeFunction"
