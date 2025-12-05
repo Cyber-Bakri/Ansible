@@ -1,169 +1,111 @@
 ---
 include:
-- project: "engineering/pipelinecli"
-  file: "/templates/plugins/plugin-steps.yml"
-  ref: latest
+  - project: 'OSPO/pipelinecli-ospo'
+    file: '/templates/plugins/fossa/.fossa-steps.yml'
+    ref: fossa-multi-rg
+
+stages:
+  - build-app
+  - scan
+  - report
 
 variables:
+  MAVEN_CLI_OPTS: "-Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true"
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
   METTA_APPLICATION: "springbootfossa"
-  METTA_COMPONENT: "pythontestapps"
+  METTA_COMPONENT: "fossamavendemo"
   SHIELD_TEAM: "springbootfossa"
   CARID: 9895
   LOB: "OSPO"
-  FOSSA_API_KEY: "${FOSSA_API_KEY}"
+  
+  # NEW: Add Datadog configuration
+  DD_API_KEY: $DD_API_KEY
+  DD_SITE: "datadoghq.com"
 
-stages:
-- test-and-scan
-
-# =========================================
-# Django Hello - Test & FOSSA Scan
-# =========================================
-django-hello-test-and-scan:
-  extends: .python-build-and-analyze-template
-  stage: test-and-scan
+# Step 1: Build cowsay-app (YOUR EXISTING BUILD)
+build-app:
+  stage: build-app
   tags:
-  - shield
-  variables:
-    DEBUG: "true"
-    WORK_DIR: django_hello
-    # Virtual environment settings
-    PYTHON_VIRTUALENV: "venv_django"
-    # Install dependencies from requirements.txt
-    PYTHON_USE_PYPROJECT_TOML: "false"
-    PYTHON_USE_REQUIREMENTS_TXT: "true"
-    # Run Django's built-in test command
-    PYTHON_COMMAND_test: "manage.py test --verbosity=2"
-    # Build package configuration for FOSSA scanning
-    PYTHON_BUILD_PACKAGE: "true"
-    PYTHON_BUILD_FRAMEWORK: "setuppy"
-    PYTHON_BUILD_TYPE: "sdist"
-    # FOSSA Analysis enabled
-    RUN_FOSSA_ANALYSIS: "true"
+    - fossa
+  image: maven:3.8.6-openjdk-11
+  before_script:
+    - apt-get update && apt-get install -y ca-certificates
+    - cp ci/settings.xml ~/.m2/settings.xml
+    - cp ci/usbank-root-ca.crt /usr/local/share/ca-certificates/usbank-root-ca.crt
+    - update-ca-certificates
+    - echo "[INFO] Java version $(java -version 2>&1 | head -n 1)"
+  script:
+    - mvn clean package -DskipTests $MAVEN_CLI_OPTS
+    - mvn dependency:copy-dependencies
+    - java -cp "target/cowsay-app-1.0.0.jar:target/dependency/*" com.example.app.Main
+  artifacts:
+    paths:
+      - target/
+    expire_in: 1 hour
+  only:
+    - main
 
-# =========================================
-# FastAPI Hello - Test & FOSSA Scan
-# =========================================
-fastapi-hello-test-and-scan:
-  extends: .python-build-and-analyze-template
-  stage: test-and-scan
+# Step 2: Fossa scan stage (YOUR EXISTING FOSSA SCAN)
+fossa-analyze:
+  extends: .fossa-scan-template
+  stage: scan
+  image: "artifactory.us.bank-dns.com:5000/shieldplatform/pipeline-cli-testing/fossa:5563250"
   tags:
-  - shield
-  needs:
-  - django-hello-test-and-scan
+    - shield
   variables:
-    DEBUG: "true"
-    WORK_DIR: fastapi_hello
-    # Virtual environment settings
-    PYTHON_VIRTUALENV: "venv_fastapi"
-    # Install dependencies from requirements.txt
-    PYTHON_USE_PYPROJECT_TOML: "false"
-    PYTHON_USE_REQUIREMENTS_TXT: "true"
-    # Unit test configuration
-    PYTHON_RUN_UNITTESTS: "true"
-    PYTHON_TEST_FRAMEWORK: "pytest"
-    PYTHON_TEST_DIRECTORY: "tests"
-    PYTHON_TEST_PATTERN: "test_*.py"
-    # FastAPI test arguments with coverage
-    PYTHON_UNITTEST_ARGS: "-v,--tb=short,--cov=fastapi_hello_world,--cov-report=term-missing"
-    # Build package configuration
-    PYTHON_BUILD_PACKAGE: "true"
-    PYTHON_BUILD_FRAMEWORK: "build"
-    PYTHON_BUILD_TYPE: "sdist"
-    # FOSSA Analysis enabled
-    RUN_FOSSA_ANALYSIS: "true"
+    FOSSA_API_KEY: ${FOSSA_API_KEY}
+    FOSSA_RELEASE_GROUPS: "Fossa-Maven-Demo"
+    FOSSA_RELEASE_VERSION: "1.1.0"
+    FOSSA_TEAM: "9895_FOSSA"
+  only:
+    - main
 
-# =========================================
-# Flask Hello - Test & FOSSA Scan
-# =========================================
-flask-hello-test-and-scan:
-  extends: .python-build-and-analyze-template
-  stage: test-and-scan
+# NEW: Step 3: Send FOSSA results to Datadog
+fossa-to-datadog:
+  stage: report
+  image: python:3.11-alpine
+  needs: ["fossa-analyze"]
   tags:
-  - shield
-  needs:
-  - fastapi-hello-test-and-scan
-  variables:
-    DEBUG: "true"
-    WORK_DIR: flask_hello
-    # Virtual environment settings
-    PYTHON_VIRTUALENV: "venv_flask"
-    # Install dependencies from requirements.txt
-    PYTHON_USE_PYPROJECT_TOML: "false"
-    PYTHON_USE_REQUIREMENTS_TXT: "true"
-    # Unit test configuration
-    PYTHON_RUN_UNITTESTS: "true"
-    PYTHON_TEST_FRAMEWORK: "pytest"
-    PYTHON_TEST_DIRECTORY: "tests"
-    PYTHON_TEST_PATTERN: "test_*.py"
-    # Flask test arguments with coverage
-    PYTHON_UNITTEST_ARGS: "-v,--tb=short,--cov=flask_hello_world,--cov-report=term-missing"
-    # Build package configuration
-    PYTHON_BUILD_PACKAGE: "true"
-    PYTHON_BUILD_FRAMEWORK: "build"
-    PYTHON_BUILD_TYPE: "sdist"
-    # FOSSA Analysis enabled
-    RUN_FOSSA_ANALYSIS: "true"
+    - shield
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-fossa-datadog
+    paths:
+      - .pip-cache/
+  before_script:
+    - apk add --no-cache curl bash jq
+    - pip install --cache-dir .pip-cache requests
+    - curl -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/fossas/fossa-cli/master/install-latest.sh | bash
+  script:
+    - |
+      echo "Fetching FOSSA scan results..."
+      
+      # Get FOSSA results
+      set +e
+      fossa test --json > fossa_results.json
+      FOSSA_EXIT_CODE=$?
+      set -e
+      
+      echo "FOSSA exit code: $FOSSA_EXIT_CODE"
+      
+      # Send to Datadog
+      python3 scripts/fossa_to_datadog.py \
+        --fossa-results fossa_results.json \
+        --exit-code $FOSSA_EXIT_CODE \
+        --dd-api-key "$DD_API_KEY" \
+        --dd-site "$DD_SITE" \
+        --project-name "$CI_PROJECT_NAME" \
+        --project-id "$CI_PROJECT_ID" \
+        --pipeline-id "$CI_PIPELINE_ID" \
+        --branch "${CI_COMMIT_BRANCH:-main}" \
+        --commit-sha "${CI_COMMIT_SHA:-unknown}"
+      
+      echo "✓ Results sent to Datadog"
+  artifacts:
+    paths:
+      - fossa_results.json
+    expire_in: 30 days
+    when: always
+  allow_failure: true  # Won't break pipeline if Datadog fails
+  only:
+    - main
 
-# =========================================
-# Python Conda Hello - Test & FOSSA Scan
-# =========================================
-python-conda-hello-test-and-scan:
-  extends: .python-build-and-analyze-template
-  stage: test-and-scan
-  tags:
-  - shield
-  needs:
-  - flask-hello-test-and-scan
-  variables:
-    DEBUG: "true"
-    WORK_DIR: python_conda_hello
-    # Virtual environment settings
-    PYTHON_VIRTUALENV: "venv_conda"
-    # Install dependencies from requirements.txt
-    PYTHON_USE_PYPROJECT_TOML: "false"
-    PYTHON_USE_REQUIREMENTS_TXT: "true"
-    # Unit test configuration
-    PYTHON_RUN_UNITTESTS: "true"
-    PYTHON_TEST_FRAMEWORK: "pytest"
-    PYTHON_TEST_DIRECTORY: "tests"
-    PYTHON_TEST_PATTERN: "test_*.py"
-    # Additional pytest arguments for better output
-    PYTHON_UNITTEST_ARGS: "-v,--tb=short,--cov=hello_world,--cov-report=term-missing"
-    # Build package configuration
-    PYTHON_BUILD_PACKAGE: "true"
-    PYTHON_BUILD_FRAMEWORK: "build"
-    PYTHON_BUILD_TYPE: "sdist"
-    # FOSSA Analysis enabled
-    RUN_FOSSA_ANALYSIS: "true"
-
-# =========================================
-# Python Pipenv Hello - Test & FOSSA Scan
-# =========================================
-python-pipenv-hello-test-and-scan:
-  extends: .python-build-and-analyze-template
-  stage: test-and-scan
-  tags:
-  - shield
-  needs:
-  - python-conda-hello-test-and-scan
-  variables:
-    DEBUG: "true"
-    WORK_DIR: python_pipenv_hello
-    # Virtual environment settings
-    PYTHON_VIRTUALENV: "venv_pipenv"
-    # Install dependencies from requirements.txt
-    PYTHON_USE_PYPROJECT_TOML: "false"
-    PYTHON_USE_REQUIREMENTS_TXT: "true"
-    # Unit test configuration
-    PYTHON_RUN_UNITTESTS: "true"
-    PYTHON_TEST_FRAMEWORK: "pytest"
-    PYTHON_TEST_DIRECTORY: "tests"
-    PYTHON_TEST_PATTERN: "test_*.py"
-    # Additional pytest arguments for better output
-    PYTHON_UNITTEST_ARGS: "-v,--tb=short,--cov=hello_world,--cov-report=term-missing"
-    # Build package configuration
-    PYTHON_BUILD_PACKAGE: "true"
-    PYTHON_BUILD_FRAMEWORK: "build"
-    PYTHON_BUILD_TYPE: "sdist"
-    # FOSSA Analysis enabled
-    RUN_FOSSA_ANALYSIS: "true"
