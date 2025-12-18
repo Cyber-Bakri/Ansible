@@ -4,7 +4,7 @@ import com.usbank.*
 pipeline {
     agent {
         kubernetes {
-            yaml easyAgents(easyTemplate: 'java')
+            yaml easyAgents(easyTemplate: 'java-11')
         }
     }
     
@@ -39,8 +39,8 @@ pipeline {
                             java -version
                             echo "[INFO] JAVA_HOME: $JAVA_HOME"
                             
-                            # Maven build with Java 8 compatibility
-                            mvn clean package -DskipTests $MAVEN_CLI_OPTS -Dmaven.compiler.source=1.8 -Dmaven.compiler.target=1.8
+                            # Maven build
+                            mvn clean package -DskipTests $MAVEN_CLI_OPTS
                             
                             # Copy dependencies
                             mvn dependency:copy-dependencies
