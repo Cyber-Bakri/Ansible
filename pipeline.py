@@ -36,10 +36,11 @@ pipeline {
                             
                             # Display Java version
                             echo "[INFO] Java version"
-                            java -version 2>&1 | head -n 1
+                            java -version
+                            echo "[INFO] JAVA_HOME: $JAVA_HOME"
                             
-                            # Maven build
-                            mvn clean package -DskipTests $MAVEN_CLI_OPTS
+                            # Maven build with Java version override
+                            mvn clean package -DskipTests $MAVEN_CLI_OPTS -Dmaven.compiler.source=11 -Dmaven.compiler.target=11 -Dmaven.compiler.release=11
                             
                             # Copy dependencies
                             mvn dependency:copy-dependencies
