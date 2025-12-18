@@ -39,8 +39,8 @@ pipeline {
                             java -version
                             echo "[INFO] JAVA_HOME: $JAVA_HOME"
                             
-                            # Maven build with Java version override
-                            mvn clean package -DskipTests $MAVEN_CLI_OPTS -Dmaven.compiler.source=11 -Dmaven.compiler.target=11 -Dmaven.compiler.release=11
+                            # Maven build with Java 8 compatibility
+                            mvn clean package -DskipTests $MAVEN_CLI_OPTS -Dmaven.compiler.source=1.8 -Dmaven.compiler.target=1.8
                             
                             # Copy dependencies
                             mvn dependency:copy-dependencies
