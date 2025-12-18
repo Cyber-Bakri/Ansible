@@ -29,7 +29,7 @@ pipeline {
                     configFileProvider([configFile(fileId: 'maven-poc-xml', variable: 'MAVEN_SETTINGS')]) {
                         sh '''
                             # Update CA certificates
-                            apt-get update && apt-get install -y ca-certificates
+                            mkdir -p ~/.m2
                             cp ci/settings.xml ~/.m2/settings.xml
                             cp ci/usbank-root-ca.crt /usr/local/share/ca-certificates/usbank-root-ca.crt
                             update-ca-certificates
