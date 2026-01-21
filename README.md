@@ -1,118 +1,140 @@
-Below is a **copy-and-paste–ready wiki version**, written in the **same style and structure as your initial document** (sectioned, concise, operational, no narrative fluff).
-You can paste this directly into Confluence / internal wiki without edits.
+Below is a **manager-ready, comprehensive documentation** you can present as an **authoritative FOSSA onboarding & operating guide**.
+It is written in a **clear, executive-friendly but technically accurate tone**, suitable for **Confluence, SharePoint, or PDF**.
 
 ---
 
-= FOSSA Platform Overview, Access Model, and CI/CD Integration =
+# FOSSA Platform Overview, Access Model, and CI/CD Integration
 
-== Overview ==
-
-The organization operates **two FOSSA SaaS environments** as part of a platform transition:
-
-* **Single-Tenant FOSSA** – Authoritative / Future state
-* **Multi-Tenant FOSSA** – Legacy / Historical reference
-
-This document defines:
-
-* Which FOSSA platform teams must use
-* Access and entitlement behavior
-* Team and CI/CD requirements
-* Migration impacts and known failure modes
+**(Single-Tenant vs Multi-Tenant Clarification & Operating Guidance)**
 
 ---
 
-== Official FOSSA Access Links ==
+## 1. Executive Summary
 
-=== Single-Tenant FOSSA (Authoritative) ===
+The organization currently operates **two FOSSA SaaS environments** as part of a platform transition:
 
-**Access URL:**
+* A **Single-Tenant FOSSA instance** (new, authoritative, future state)
+* A **Multi-Tenant FOSSA instance** (legacy, retained for historical data)
+
+This document clarifies:
+
+* Which platform teams must use going forward
+* How access and entitlements work
+* How team management and CI/CD scanning behavior has changed
+* What actions application teams must take to avoid scan failures
+* What historical data remains and why
+
+This documentation resolves ongoing confusion around portals, entitlements, team creation, and pipeline behavior.
+
+---
+
+## 2. Official FOSSA Access Points
+
+### 2.1 Single-Tenant FOSSA (Authoritative / Future State)
+
+**Official Access Link**
 
 ```
 https://go/fossa
 ```
 
-**Description:**
-Primary FOSSA platform used for:
+**Purpose**
 
-* New onboarding
-* CI/CD pipeline scanning
-* Production usage
-* Controlled upgrades and validation
+* Primary platform for:
 
-**Key Characteristics:**
+  * New onboarding
+  * CI/CD integration
+  * Production security scanning
+  * Controlled upgrades and validation
+
+**Platform Characteristics**
 
 * Dedicated AWS account
+* Controlled release cadence
 * SAML + Active Directory authentication
 * Explicit team-based authorization
-* Auto-creation of teams is **disabled**
-* New scans establish a **new SBOM baseline**
+* No automatic creation of teams
+* Establishes a **new SBOM baseline**
+
+This is the **default and supported platform** moving forward.
 
 ---
 
-=== Multi-Tenant FOSSA (Legacy) ===
+### 2.2 Multi-Tenant FOSSA (Legacy / Historical)
 
-**Access URL:**
+**Official Access Link**
 
 ```
 https://go/fossa-legacy
 ```
 
-**Description:**
-Legacy shared SaaS environment retained for **historical reference only**.
+**Purpose**
 
-**Key Characteristics:**
+* Retained for **historical reference only**
 
-* Contains ~17,000 historical SBOMs
-* Historical commit and scan data preserved
-* More frequent platform updates
+**Platform Characteristics**
+
+* Shared SaaS environment
+* Contains ~17,000 existing SBOMs
+* Historical commits and scan data preserved
+* More frequent platform changes
 * Will be retired over time
-* Not used for new onboarding or pipelines
+
+This platform should **not** be used for new onboarding or pipelines.
 
 ---
 
-== Platform Usage Guidance ==
+## 3. Which Platform Should Teams Use?
 
-| Use Case               | Platform                       |
-| ---------------------- | ------------------------------ |
-| New onboarding         | Single-Tenant (go/fossa)       |
-| CI/CD integration      | Single-Tenant (go/fossa)       |
-| Production scanning    | Single-Tenant (go/fossa)       |
-| Controlled upgrades    | Single-Tenant (go/fossa)       |
-| Historical SBOM review | Multi-Tenant (go/fossa-legacy) |
+| Use Case                   | Platform                         |
+| -------------------------- | -------------------------------- |
+| New onboarding             | Single-Tenant (`go/fossa`)       |
+| CI/CD pipeline scans       | Single-Tenant (`go/fossa`)       |
+| Production scanning        | Single-Tenant (`go/fossa`)       |
+| Controlled upgrade testing | Single-Tenant (`go/fossa`)       |
+| Historical SBOM review     | Multi-Tenant (`go/fossa-legacy`) |
 
-**Rule:** If unsure, default to **Single-Tenant FOSSA**.
+**Guidance:**
+If there is uncertainty, teams should **default to Single-Tenant FOSSA**.
 
 ---
 
-== Authentication & Authorization ==
+## 4. Access & Authentication Model
 
-=== Authentication ===
+### 4.1 Authentication
 
-* Managed via **SAML and Active Directory (AD)**
-* Users authenticate with corporate credentials
+* Authentication is managed via **SAML and Active Directory (AD)**
+* Users authenticate using corporate credentials
+* AD group membership is evaluated at login
 
-=== Authorization Behavior ===
+### 4.2 Authorization Behavior (Important)
 
 * AD group names must match **existing FOSSA teams**
-* Matching team → user added
-* No matching team → login succeeds but no data is visible
-* Teams are **not auto-created**
+* If a matching team exists → user is added
+* If no matching team exists → login succeeds, but user sees no data
+* **Teams are not auto-created**
+
+This behavior is intentional and enforces stricter governance.
 
 ---
 
-== Team Management Model ==
+## 5. Team Management Model (Critical Change)
 
-=== Auto-Create Disabled (Important) ===
+### 5.1 Auto-Create Disabled
 
-* Teams must be created manually
-* FOSSA will not auto-create missing teams
+In the Single-Tenant FOSSA platform:
+
+* Teams **must be created manually**
+* FOSSA **will not auto-create teams**
 * CI/CD scans referencing a non-existent team will **fail**
 
+This is a significant change from earlier behavior and must be accounted for during onboarding.
+
 ---
 
-=== Required Team Structure per Project ===
+### 5.2 Required Team Structure per Project
 
-Each project must have the following four teams:
+Each application or project must have **four predefined teams**:
 
 | Team Name Pattern       | Role   |
 | ----------------------- | ------ |
@@ -121,123 +143,158 @@ Each project must have the following four teams:
 | `<project>_contributor` | Editor |
 | `<project>_viewer`      | Viewer |
 
-**Scanning Behavior:**
+**Scanning Behavior**
 
-* Scans are associated with all four teams
-* Ensures visibility across roles and separation of duties
-
----
-
-=== Team Administration ===
-
-* Only **team admins** can add/remove users
-* Org-level admin access is not required for routine management
+* Each scan is associated with all four teams
+* Ensures visibility and access across roles
+* Supports separation of duties
 
 ---
 
-== CI/CD Integration Requirements ==
+### 5.3 Team Administration
 
-=== Pre-Scan Prerequisites ===
-Before enabling FOSSA scans:
-
-# Project teams must exist in FOSSA
-
-# AD groups must map correctly to teams
-
-# Service accounts must be added to required teams
-
-# Valid FOSSA API token must be configured in CI/CD
-
-**Failure Mode:**
-If a scan references a missing team, the scan fails immediately.
+* Only **team admins** can add or remove users
+* Organization-level admin access is not required for day-to-day team management
+* This model decentralizes access while preserving governance
 
 ---
 
-=== API Tokens & Credentials ===
+## 6. CI/CD Integration Requirements
 
-* Legacy API tokens will be **de-provisioned**
+### 6.1 Jenkins / Build Server Impact
+
+**Mandatory prerequisites before enabling FOSSA scans:**
+
+1. Project teams must exist in FOSSA
+2. AD groups must map correctly to those teams
+3. Service accounts must be assigned to required teams
+4. Valid API token must be configured in Jenkins
+
+**Failure Mode**
+
+* If a scan references a missing team → scan fails immediately
+
+This behavior is by design and must be documented for application teams.
+
+---
+
+### 6.2 API Tokens & Credential Management
+
+* Existing API tokens from legacy environments will be **de-provisioned**
 * New tokens must be generated after SSO setup
-* CI/CD credentials must be updated accordingly
+* Jenkins credentials must be updated accordingly
+
+**Recommendation**
+
+* Treat token rotation as mandatory during migration
+* Avoid reusing legacy credentials
 
 ---
 
-== Desktop / Local CLI Integration ==
+## 7. Desktop / Local CLI Usage
 
-* Local scans use the `fossa-cli`
-* CLI and plugins must be validated in **Staging**
-* Old tokens will stop working after SSO enablement
+* Local scanning uses the `fossa-cli`
+* CLI, plugins, and integrations must be:
 
----
+  * Validated in **Staging**
+  * Tested before Production use
+* Once SSO is enabled, old tokens will no longer function
 
-== Version / Upgrade Information (Early Testers) ==
-
-**Upgrade Cycle:**
-Single-Tenant Staging leads Production by ~2–3 weeks.
-
-**Testing Window:**
-US Bank has 2–3 weeks to validate releases in Staging.
-
-**Validation Strategy:**
-
-* Automated tests for plugins, CLI, and build containers
-* API latency and ingestion verification
-* Certificate validation
-
-**Sign-Off:**
-Required within 5–10 business days for major upgrades.
-
-**Deferral Policy:**
-
-* Minor upgrades: up to 60 days
-* Major upgrades: up to 90 days
-
-**Auto-Trigger:**
-If deferral expires, FOSSA performs an automatic upgrade.
+This primarily impacts developers running scans locally.
 
 ---
 
-== Vulnerability & SBOM Strategy ==
+## 8. Upgrade & Release Management (Informational)
 
-**Data Continuity:**
-Live data is preserved during migration. Historical commits remain in Multi-Tenant.
+* Staging environment leads Production by **2–3 weeks**
+* Validation window:
 
-**Baseline:**
-Single-Tenant scanning establishes a **new baseline**.
+  * 2–3 weeks in Staging
+* Sign-off required:
 
-**SBOM Strategy:**
-~17,000 existing SBOMs remain in Multi-Tenant for historical reference. SBOM import is intentionally avoided to reduce complexity.
+  * 5–10 business days for major upgrades
+* Deferral policy:
 
----
+  * Minor upgrades: up to 60 days
+  * Major upgrades: up to 90 days
+* If deferral expires, FOSSA performs an automatic upgrade to maintain security compliance
 
-== Common Failure Scenarios ==
-
-| Issue                             | Cause                  | Resolution                 |
-| --------------------------------- | ---------------------- | -------------------------- |
-| User logs in but sees nothing     | No matching FOSSA team | Create team + map AD group |
-| CI/CD scan fails                  | Team does not exist    | Create team before scan    |
-| Previously working pipeline fails | Auto-create disabled   | Complete onboarding        |
-| Token no longer works             | Legacy token revoked   | Generate new token         |
+Pipeline owners do not manage upgrades directly; this is platform-controlled.
 
 ---
 
-== Summary ==
+## 9. SBOM & Vulnerability Strategy
 
-The move to **Single-Tenant FOSSA** provides stronger governance, improved stability, and controlled upgrades.
-However, it requires **explicit onboarding**, **manual team creation**, and **clear AD mapping**.
+### 9.1 Data Continuity
 
-All new work must use **[https://go/fossa](https://go/fossa)**.
-The legacy environment (**[https://go/fossa-legacy](https://go/fossa-legacy)**) remains read-only for historical reference.
+* Live operational data is preserved during migration
+* Historical commit data remains in the Multi-Tenant environment
+
+### 9.2 Baseline Strategy
+
+* Single-Tenant FOSSA establishes a **new SBOM baseline**
+* Existing ~17,000 SBOMs remain in the legacy platform
+* SBOM import is intentionally avoided to reduce complexity
+
+This decision prevents data corruption and ensures clean baselining.
 
 ---
 
-{{Category:FOSSA}}
-{{Category:Security Scanning}}
-{{Category:CI/CD}}
+## 10. Common Failure Scenarios
+
+| Issue                             | Cause                          | Resolution                    |
+| --------------------------------- | ------------------------------ | ----------------------------- |
+| User logs in but sees nothing     | No matching FOSSA team         | Create team + map AD group    |
+| CI/CD scan fails immediately      | Referenced team does not exist | Create team before scan       |
+| Pipeline worked before, now fails | Auto-create disabled           | Complete onboarding checklist |
+| Token no longer works             | Legacy token de-provisioned    | Generate new token            |
 
 ---
 
-If you want, I can also:
+## 11. Required Documentation Updates (Action Items)
 
-* Align this exactly to your existing wiki headings
-* Add a short **“Before You Start” checklist**
-* Convert this to **Confluence storage format (XML)**
+To align with the Single-Tenant model, all FOSSA documentation must:
+
+1. Reference **`https://go/fossa`** as the primary platform
+2. Clearly label **`https://go/fossa-legacy`** as legacy
+3. Explicitly state:
+
+   * Teams must exist before scanning
+   * Auto-create is disabled
+   * Missing teams cause scan failures
+4. Document the mandatory four-team project model
+5. Clarify SBOM baseline and historical data strategy
+
+---
+
+## 12. Conclusion
+
+The transition to **Single-Tenant FOSSA** introduces stronger governance, improved stability, and clearer ownership, but also requires **more deliberate onboarding**.
+
+By documenting:
+
+* Platform selection
+* Team requirements
+* AD mapping behavior
+* CI/CD prerequisites
+
+we eliminate ambiguity, reduce onboarding friction, and prevent avoidable pipeline failures.
+
+---
+
+### Optional Next Steps (If Approved)
+
+* Publish a one-page **FOSSA onboarding checklist**
+* Add Jenkins preflight validation guidance
+* Create a visual flow diagram for access and scanning
+
+---
+
+If you want, I can:
+
+* Convert this into a **Confluence-formatted page**
+* Produce a **PDF for leadership**
+* Create a **short executive summary slide**
+* Tailor it to your org’s naming standards
+
+Just tell me the format your manager prefers.
